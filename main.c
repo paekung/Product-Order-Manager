@@ -27,9 +27,10 @@ void load_csv(const char *filename){
             printf("%s ", token);
             token = strtok(NULL, ","); // Continue
         }
+
+        printf("\n");
     }
 
-    printf("\n");
     fclose(fp);
 
 }
