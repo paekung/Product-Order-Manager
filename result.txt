@@ -1,3 +1,0 @@
-ProductID ProductName Quantity UnitPrice 
-P001 Laptop 10 25000 
-P002 Smartphone 15 15000
