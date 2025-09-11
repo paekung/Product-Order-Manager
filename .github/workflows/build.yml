@@ -1,41 +1,44 @@
-
-
 name: C Build and Test
+
 on:
   workflow_dispatch:
-   inputs:
-     prerelease:
-       description: 'Is this a prerelease? (true/false)'
-       required: true
-       default: 'false'
+    inputs:
+      prerelease:
+        type: boolean
+        description: "Mark this as a pre-release?"
+        default: false
   # push:
-  #   branches:
-  #     - main
+  #   branches: [ main ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Set up GCC
-        uses: Dup4/actions-setup-gcc@v1
-        with:
-          gcc-version: 'latest'
+      # GCC is preinstalled on ubuntu-latest (24.04). Keep this only if you require a specific GCC.
+      # - name: Set up GCC
+      #   uses: Dup4/actions-setup-gcc@v1
+      #   with:
+      #     gcc-version: 'latest'
 
       - name: Build the C program
-        run: gcc -o main main.c
+        run: gcc -std=c17 -O2 -Wall -Wextra -Werror -o main main.c
 
       - name: Run the program
         run: ./main
+
       - name: Upload to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: main,products.csv
+          artifacts: "main,products.csv"
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.run_number }}
-          name: Release ${{ github.run_number }}
-          body: Automated release of the C program
+          tag: v${{ github.run_number }}
+          name: "Release ${{ github.run_number }}"
+          body: "Automated release of the C program"
           draft: false
-          prerelease: ${{ github.event.inputs.prerelease }}
+          prerelease: ${{ inputs.prerelease }}
