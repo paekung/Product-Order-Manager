@@ -1,0 +1,39 @@
+
+
+name: C Build and Test
+on:
+  workflow_dispatch:
+   inputs:
+     prerelease:
+       description: 'Is this a prerelease? (true/false)'
+       required: true
+       default: 'false'
+  # push:
+  #   branches:
+  #     - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up GCC
+        uses: actions/setup-gcc@v1
+
+      - name: Build the C program
+        run: gcc -o main main.c
+
+      - name: Run the program
+        run: ./main
+      - name: Upload to Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: main,products.csv
+          token: ${{ secrets.KEY }}
+          tag: ${{ github.run_number }}
+          name: Release ${{ github.run_number }}
+          body: Automated release of the C program
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
