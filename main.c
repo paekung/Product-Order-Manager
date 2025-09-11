@@ -13,7 +13,10 @@ void load_csv(const char *filename){
     FILE *fp;
     char line[1024];
 
-    fp = fopen(filename, "r");
+    if(!(fp = fopen(filename, "r"))){
+        perror("fopen");
+        return;
+    }
 
     while(fgets(line, sizeof(line), fp)){
         // printf("%s",line);
