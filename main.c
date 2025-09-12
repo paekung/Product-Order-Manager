@@ -9,8 +9,9 @@ typedef struct {
     int UnitPrice;
 } Product;
 
-Product products[100];
+Product *products = NULL;
 int product_count = 0;
+int product_capacity = 0;
 
 void load_csv(const char *filename);
 
@@ -37,6 +38,17 @@ void load_csv(const char *filename){
     fgets(line, sizeof(line), fp);
 
     while(fgets(line, sizeof(line), fp)){
+
+        if (product_count == product_capacity) {
+            product_capacity = product_capacity == 0 ? 10 : product_capacity * 2;
+            products = realloc(products, product_capacity * sizeof(Product));
+            if (!products) {
+                perror("realloc");
+                fclose(fp);
+                exit(1);
+            }
+        }
+
         line[strcspn(line, "\r\n")] = '\0'; // Remove newline characters
         char *token = strtok(line, ","); // Tokenize by comma
         
