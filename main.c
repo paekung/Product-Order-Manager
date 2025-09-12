@@ -50,10 +50,10 @@ void load_csv(const char *filename){
                     strcpy(products[product_count].ProductName, token);
                     break;
                 case 2:
-                    products[product_count].UnitPrice = atoi(token);
+                    products[product_count].Quantity = atoi(token);
                     break;
                 case 3:
-                    products[product_count].Quantity = atoi(token);
+                    products[product_count].UnitPrice = atoi(token);
                     break;
                 default:
                     break;
