@@ -21,6 +21,7 @@ int main(){
         printf("ProductID: %s, ProductName: %s, Quantity: %d, UnitPrice: %d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
     }
     return 0;
+    free(products);
 }
 
 void load_csv(const char *filename){
