@@ -20,8 +20,9 @@ int main(){
     for(int i=0; i<product_count; i++){
         printf("ProductID: %s, ProductName: %s, Quantity: %d, UnitPrice: %d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
     }
-    return 0;
+    
     free(products);
+    return 0;
 }
 
 void load_csv(const char *filename){
