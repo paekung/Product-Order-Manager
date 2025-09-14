@@ -15,6 +15,7 @@ int product_capacity = 0;
 
 int load_csv(const char *filename);
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
+int remove_product(const char *ProductID);
 
 int main(){
     if(load_csv("products.csv")){
@@ -106,4 +107,18 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
     products[product_count].UnitPrice = UnitPrice;
     product_count++;
     return 0;
+}
+
+// remove product by ProductID
+int remove_product(const char *ProductID){
+    for(int i=0; i<product_count; i++){
+        if(strcmp(products[i].ProductID, ProductID) == 0){
+            for(int j=i; j<product_count-1; j++){
+                products[j] = products[j+1];
+            }
+            product_count--;
+            return 0;     
+        }
+    }
+    return 1;
 }
