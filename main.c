@@ -16,6 +16,7 @@ int product_capacity = 0;
 int load_csv(const char *filename);
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 int remove_product(const char *ProductID);
+int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 
 int main(){
     if(load_csv("products.csv")){
@@ -118,6 +119,25 @@ int remove_product(const char *ProductID){
             }
             product_count--;
             return 0;     
+        }
+    }
+    return 1;
+}
+
+// update product by ProductID
+int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
+    for(int i=0; i<product_count; i++){
+        if(strcmp(products[i].ProductID, ProductID) == 0){
+            if(ProductName != NULL){
+                strcpy(products[i].ProductName, ProductName);
+            }
+            if(Quantity >= 0){
+                products[i].Quantity = Quantity;
+            }
+            if(UnitPrice >= 0){
+                products[i].UnitPrice = UnitPrice;
+            }
+            return 0;
         }
     }
     return 1;
