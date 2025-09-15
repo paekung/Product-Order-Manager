@@ -22,6 +22,7 @@ int remove_product(const char *ProductID);
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 void menu();
 void menu_list_products();
+void menu_add_product();
 
 void clear_screen() {
     printf("\033[2J\033[H");
@@ -138,7 +139,7 @@ void menu() {
                 break;
 
             case 2:
-                printf("Adding a new product...\n");
+                menu_add_product();
                 wait_for_enter();
                 break;
 
@@ -164,6 +165,14 @@ void menu() {
 }
 // add product
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
+
+    // Check for duplicate ProductID
+    for(int i=0; i<product_count; i++){
+        if(strcmp(products[i].ProductID, ProductID) == 0){
+            return 1; // Duplicate found
+        }
+    }
+
     // Dynamically allocate or reallocate memory for products
     if (product_count == product_capacity) {
         product_capacity = product_capacity == 0 ? 10 : product_capacity * 2;
@@ -230,4 +239,56 @@ void menu_list_products(){
         printf("%-10s %-20s %-10d %-10d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
     }
     printf("──────────────────────────────────────────────────────────────\n");
+}
+
+void menu_add_product(){
+    char ProductID[20];
+    char ProductName[100];
+    int Quantity;
+    int UnitPrice;
+
+    clear_screen();
+    printf("\033[1m");
+    printf("── Product Order Manager | Add Product ───────────────────────\n\n");
+    printf("\033[0m");
+
+
+    printf("Enter Product ID: ");
+    printf("\033[1;33m");
+    scanf("%s", ProductID);
+    while(getchar() != '\n');
+    printf("\033[0m");
+
+    printf("Enter Product Name: ");
+    printf("\033[1;33m");
+    fgets(ProductName, sizeof(ProductName), stdin);
+    ProductName[strcspn(ProductName, "\r\n")] = '\0';
+    printf("\033[0m");
+
+
+    printf("Enter Quantity: ");
+    printf("\033[1;33m");
+    while (scanf("%d", &Quantity) != 1 || Quantity < 0) {
+        printf("\033[0m");
+        printf("Invalid input. Please enter a integer for Quantity: ");
+        while(getchar() != '\n');
+    }
+    while(getchar() != '\n');
+    printf("\033[0m");
+
+    printf("Enter Unit Price: ");
+    printf("\033[1;33m");
+    while (scanf("%d", &UnitPrice) != 1 || UnitPrice < 0) {
+        printf("\033[0m");
+        printf("Invalid input. Please enter a integer for Unit Price: ");
+        while(getchar() != '\n');
+    }
+    while(getchar() != '\n');
+    printf("\033[0m");
+
+    if(add_product(ProductID, ProductName, Quantity, UnitPrice) == 0){
+        printf("\n\033[1;32mProduct added successfully!\033[0m\n");
+    } else {
+        printf("\033[1;31mFailed to add product. Duplicate Product ID\033[0m\n");
+    }
 }
