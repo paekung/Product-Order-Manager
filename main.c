@@ -21,6 +21,18 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
 int remove_product(const char *ProductID);
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 void menu();
+void menu_list_products();
+
+void clear_screen() {
+    printf("\033[2J\033[H");
+}
+
+void wait_for_enter() {
+    printf("\033[1;32m");
+    printf("Press Enter to back to menu...");
+    while (getchar() != '\n');
+    getchar();
+}
 
 // Main function
 int main(){
@@ -31,13 +43,6 @@ int main(){
     };
 
     menu();
-
-    // printf("---------------------------------------------------------------\n");
-    // printf("%-10s %-20s %-10s %-10s\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
-    // for(int i=0; i<product_count; i++){
-    //     printf("%-10s %-20s %-10d %-10d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
-    // }
-    // printf("---------------------------------------------------------------\n");
     
     // Free allocated memory
     free(products);
@@ -103,21 +108,60 @@ int load_csv(const char *filename){
     return 0;
 }
 
-void menu(){
-    printf("── Product Order Manager | Menu ───\n");
+void menu() {
+    int choice;
 
-    printf("\033[1;33m");
-    printf("Choose an option:\n");
-    printf("\033[0m");
+    do {
+        clear_screen();
+        printf("\033[0m");
+        printf("\033[1m");
+        printf("── Product Order Manager | Menu ───\n\n");
+        printf("\033[0m");
+        printf("\033[1;33mChoose an option:\033[0m\n");
+        printf("\033[1;32m [1] \033[0mList all products\n");
+        printf("\033[1;32m [2] \033[0mAdd a new product\n");
+        printf("\033[1;32m [3] \033[0mRemove a product\n");
+        printf("\033[1;32m [4] \033[0mUpdate a product\n");
+        printf("\033[1;32m [0] \033[0mExit\n\n");
 
-    printf("\033[1;32m");
-    printf(" [1] \033[0mList all products\n");
-    printf("\033[1;32m [2] \033[0mAdd a new product\n");
-    printf("\033[1;32m [3] \033[0mRemove a product\n");
-    printf("\033[1;32m [4] \033[0mUpdate a product\n");
-    printf("\n");
+        printf("Enter your choice: ");
+        if (scanf("%d", &choice) != 1) {
+            while (getchar() != '\n');
+            choice = -1;
+        }
+
+        switch (choice) {
+            case 1:
+                clear_screen();
+                menu_list_products();
+                wait_for_enter();
+                break;
+
+            case 2:
+                printf("Adding a new product...\n");
+                wait_for_enter();
+                break;
+
+            case 3:
+                printf("Removing a product...\n");
+                wait_for_enter();
+                break;
+
+            case 4:
+                printf("Updating a product...\n");
+                wait_for_enter();
+                break;
+
+            case 0:
+                printf("Exiting the program...\n");
+                break;
+
+            default:
+                printf("Invalid choice! Please try again.\n");
+                break;
+        }
+    } while (choice != 0);
 }
-
 // add product
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
     // Dynamically allocate or reallocate memory for products
@@ -172,4 +216,18 @@ int update_product(const char *ProductID, const char *ProductName, int Quantity,
         }
     }
     return 1;
+}
+
+// list all products
+void menu_list_products(){   
+    printf("\033[1m"); 
+    printf("── Product Order Manager | Listing ───────────────────────────\n");
+    printf("\033[0m");
+    printf("\033[1;33m");
+    printf("%-10s %-20s %-10s %-10s\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
+    printf("\033[0m");
+    for(int i=0; i<product_count; i++){
+        printf("%-10s %-20s %-10d %-10d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
+    }
+    printf("──────────────────────────────────────────────────────────────\n");
 }
