@@ -20,6 +20,7 @@ int load_csv(const char *filename);
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 int remove_product(const char *ProductID);
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
+int save_csv(const char *filename);
 void menu();
 void menu_list_products();
 void menu_add_product();
@@ -189,6 +190,12 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
     products[product_count].Quantity = Quantity;
     products[product_count].UnitPrice = UnitPrice;
     product_count++;
+
+    if(save_csv("products.csv")){
+        printf("Failed to save CSV file.\n");
+        return 1;
+    };
+
     return 0;
 }
 
@@ -225,6 +232,24 @@ int update_product(const char *ProductID, const char *ProductName, int Quantity,
         }
     }
     return 1;
+}
+
+int save_csv(const char *filename){
+    FILE *fp;
+
+    if(!(fp = fopen(filename, "w"))){
+        perror("fopen");
+        return 1;
+    }
+
+    fprintf(fp, "ProductID,ProductName,Quantity,UnitPrice\n");
+
+    for(int i=0; i<product_count; i++){
+        fprintf(fp, "%s,%s,%d,%d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
+    }
+
+    fclose(fp);
+    return 0;
 }
 
 // list all products
