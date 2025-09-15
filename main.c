@@ -30,9 +30,8 @@ void clear_screen() {
 }
 
 void wait_for_enter() {
-    printf("\033[1;32m");
-    printf("Press Enter to back to menu...");
-    while (getchar() != '\n');
+    printf("\033[1;32mPress Enter to back to menu...\033[0m");
+    fflush(stdout);
     getchar();
 }
 
@@ -130,6 +129,9 @@ void menu() {
         if (scanf("%d", &choice) != 1) {
             while (getchar() != '\n');
             choice = -1;
+        } else {
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {}
         }
 
         switch (choice) {
