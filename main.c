@@ -20,6 +20,7 @@ int load_csv(const char *filename);
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 int remove_product(const char *ProductID);
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
+void menu();
 
 // Main function
 int main(){
@@ -29,9 +30,14 @@ int main(){
         return 1;
     };
 
-    for(int i=0; i<product_count; i++){
-        printf("ProductID: %s, ProductName: %s, Quantity: %d, UnitPrice: %d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
-    }
+    menu();
+
+    // printf("---------------------------------------------------------------\n");
+    // printf("%-10s %-20s %-10s %-10s\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
+    // for(int i=0; i<product_count; i++){
+    //     printf("%-10s %-20s %-10d %-10d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
+    // }
+    // printf("---------------------------------------------------------------\n");
     
     // Free allocated memory
     free(products);
@@ -95,6 +101,21 @@ int load_csv(const char *filename){
 
     fclose(fp);
     return 0;
+}
+
+void menu(){
+    printf("── Product Order Manager | Menu ───\n");
+
+    printf("\033[1;33m");
+    printf("Choose an option:\n");
+    printf("\033[0m");
+
+    printf("\033[1;32m");
+    printf(" [1] \033[0mList all products\n");
+    printf("\033[1;32m [2] \033[0mAdd a new product\n");
+    printf("\033[1;32m [3] \033[0mRemove a product\n");
+    printf("\033[1;32m [4] \033[0mUpdate a product\n");
+    printf("\n");
 }
 
 // add product
