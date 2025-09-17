@@ -24,6 +24,7 @@ int save_csv(const char *filename);
 void menu();
 void menu_list_products();
 void menu_add_product();
+void menu_search_product();
 
 void clear_screen() {
     printf("\033[2J\033[H");
@@ -120,9 +121,10 @@ void menu() {
         printf("\033[0m");
         printf("\033[1;33mChoose an option:\033[0m\n");
         printf("\033[1;32m [1] \033[0mList all products\n");
-        printf("\033[1;32m [2] \033[0mAdd a new product\n");
-        printf("\033[1;32m [3] \033[0mRemove a product\n");
-        printf("\033[1;32m [4] \033[0mUpdate a product\n");
+        printf("\033[1;32m [2] \033[0mSearch products\n");
+        printf("\033[1;32m [3] \033[0mAdd a new product\n");
+        printf("\033[1;32m [4] \033[0mRemove a product\n");
+        printf("\033[1;32m [5] \033[0mUpdate a product\n");
         printf("\033[1;32m [0] \033[0mExit\n\n");
 
         printf("Enter your choice: ");
@@ -142,16 +144,20 @@ void menu() {
                 break;
 
             case 2:
-                menu_add_product();
+                menu_search_product();
                 wait_for_enter();
                 break;
 
             case 3:
-                printf("Removing a product...\n");
+                menu_add_product();
                 wait_for_enter();
                 break;
 
             case 4:
+                printf("Removing a product...\n");
+                wait_for_enter();
+                break;
+            case 5:
                 printf("Updating a product...\n");
                 wait_for_enter();
                 break;
@@ -268,6 +274,69 @@ void menu_list_products(){
     printf("──────────────────────────────────────────────────────────────\n");
 }
 
+#include <ctype.h>
+#include <string.h>
+
+void menu_search_product(){
+    clear_screen();
+    char keyword[100];
+    int found = 0;
+
+    printf("\033[1m");
+    printf("── Product Order Manager | Search ────────────────────────────\n\n");
+    printf("\033[0m");
+
+    printf("Enter Product ID or Name keyword or \033[1;31m~exit\033[0m to cancel: ");
+    fgets(keyword, sizeof(keyword), stdin);
+    keyword[strcspn(keyword, "\r\n")] = '\0';
+
+    if(strcmp(keyword, "~exit") == 0){
+        return;
+    }
+
+    for (int i = 0; keyword[i]; i++) {
+        keyword[i] = tolower((unsigned char)keyword[i]);
+    }
+
+    printf("\n\033[1;33m%-10s %-20s %-10s %-10s\033[0m\n",
+           "ProductID","ProductName","Quantity","UnitPrice");
+
+    for (int i = 0; i < product_count; i++) {
+        char id_lower[100], name_lower[100];
+
+        strcpy(id_lower, products[i].ProductID);
+        strcpy(name_lower, products[i].ProductName);
+
+        for (int j = 0; id_lower[j]; j++) {
+            id_lower[j] = tolower((unsigned char)id_lower[j]);
+        }
+        for (int j = 0; name_lower[j]; j++) {
+            name_lower[j] = tolower((unsigned char)name_lower[j]);
+        }
+
+        if (strstr(id_lower, keyword) != NULL ||
+            strstr(name_lower, keyword) != NULL) {
+
+            printf("%-10s %-20s %-10d %-10d\n",
+                products[i].ProductID,
+                products[i].ProductName,
+                products[i].Quantity,
+                products[i].UnitPrice);
+
+            found = 1;
+        }
+    }
+
+    if (!found) {
+        printf("No product found.\n");
+    }
+
+    printf("──────────────────────────────────────────────────────────────\n");
+}
+
+
+
+
 void menu_add_product(){
     char ProductID[20];
     char ProductName[100];
@@ -279,19 +348,28 @@ void menu_add_product(){
     printf("── Product Order Manager | Add Product ───────────────────────\n\n");
     printf("\033[0m");
 
-
-    printf("Enter Product ID: ");
+    printf("Enter Product ID or type \033[1;31m~exit\033[0m to cancel : ");
     printf("\033[1;33m");
     scanf("%s", ProductID);
     while(getchar() != '\n');
     printf("\033[0m");
+
+    if(strcmp(ProductID, "~exit") == 0){
+        return;
+    }
+
+    for(int i=0; i<product_count; i++){
+        if(strcmp(products[i].ProductID, ProductID) == 0){
+            printf("\033[1;31mDuplicate Product ID. Can't be this ID.\033[0m\n");
+            return;
+        }
+    }
 
     printf("Enter Product Name: ");
     printf("\033[1;33m");
     fgets(ProductName, sizeof(ProductName), stdin);
     ProductName[strcspn(ProductName, "\r\n")] = '\0';
     printf("\033[0m");
-
 
     printf("Enter Quantity: ");
     printf("\033[1;33m");
