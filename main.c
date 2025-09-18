@@ -2,6 +2,10 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 // Define Product structure
 typedef struct {
     char ProductID[20];
@@ -38,6 +42,10 @@ void wait_for_enter() {
 
 // Main function
 int main(){
+    #ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8); // Windows-specific
+    #endif
+
     // Load products from CSV file
     if(load_csv("products.csv")){
         printf("Failed to load CSV file.\n");
