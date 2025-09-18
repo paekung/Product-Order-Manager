@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
+// For Windows console UTF-8 support
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -29,7 +31,9 @@ void menu();
 void menu_list_products();
 void menu_add_product();
 void menu_search_product();
+/////////////////////////
 
+// Utility functions
 void clear_screen() {
     printf("\033[2J\033[H");
 }
@@ -39,9 +43,12 @@ void wait_for_enter() {
     fflush(stdout);
     getchar();
 }
+////////////////////////
+
 
 // Main function
 int main(){
+    // Enable UTF-8 support for Windows console
     #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8); // Windows-specific
     #endif
@@ -52,6 +59,7 @@ int main(){
         return 1;
     };
 
+    // Show menu
     menu();
     
     // Free allocated memory
@@ -59,6 +67,7 @@ int main(){
     return 0;
 }
 
+// Load products from CSV file then store in products struct
 int load_csv(const char *filename){
     FILE *fp;
     char line[1024];
@@ -72,6 +81,7 @@ int load_csv(const char *filename){
     // Skip the header line
     fgets(line, sizeof(line), fp);
 
+    // Read each line from the CSV file
     while(fgets(line, sizeof(line), fp)){
 
         // Dynamically allocate or reallocate memory for products
@@ -88,6 +98,7 @@ int load_csv(const char *filename){
         line[strcspn(line, "\r\n")] = '\0'; // Remove newline characters
         char *token = strtok(line, ","); // Tokenize by comma
         
+        // Parse each token and store in the struct
         int index = 0;
         while (token){
             switch(index){
@@ -98,7 +109,7 @@ int load_csv(const char *filename){
                     strcpy(products[product_count].ProductName, token);
                     break;
                 case 2:
-                    products[product_count].Quantity = atoi(token);
+                    products[product_count].Quantity = atoi(token); // Convert string to integer using atoi
                     break;
                 case 3:
                     products[product_count].UnitPrice = atoi(token);
@@ -107,11 +118,11 @@ int load_csv(const char *filename){
                     break;
             }
 
-            token = strtok(NULL, ",");
-            index++;
+            token = strtok(NULL, ","); // Get next token
+            index++; // Increment index
         }
 
-        product_count++;
+        product_count++; // Increment product count
     }
 
     fclose(fp);
@@ -136,6 +147,7 @@ void menu() {
         printf("\033[1;32m [0] \033[0mExit\n\n");
 
         printf("Enter your choice: ");
+        
         if (scanf("%d", &choice) != 1) {
             while (getchar() != '\n');
             choice = -1;
@@ -145,41 +157,40 @@ void menu() {
         }
 
         switch (choice) {
-            case 1:
+            case 1: // List products
                 clear_screen();
                 menu_list_products();
                 wait_for_enter();
                 break;
 
-            case 2:
+            case 2: // Search products
                 menu_search_product();
                 wait_for_enter();
                 break;
 
-            case 3:
+            case 3: // Add product
                 menu_add_product();
                 wait_for_enter();
                 break;
 
-            case 4:
+            case 4: // Remove product
                 printf("Removing a product...\n");
                 wait_for_enter();
                 break;
-            case 5:
+            case 5: // Update product
                 printf("Updating a product...\n");
                 wait_for_enter();
                 break;
-
-            case 0:
+            case 0: // Exit
                 printf("Exiting the program...\n");
                 break;
-
             default:
                 printf("Invalid choice! Please try again.\n");
                 break;
         }
-    } while (choice != 0);
+    } while (choice != 0); // Loop until user chooses to exit
 }
+
 // add product
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
 
@@ -192,8 +203,8 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
 
     // Dynamically allocate or reallocate memory for products
     if (product_count == product_capacity) {
-        product_capacity = product_capacity == 0 ? 10 : product_capacity * 2;
-        products = realloc(products, product_capacity * sizeof(Product));
+        product_capacity = product_capacity == 0 ? 10 : product_capacity * 2; // Double the capacity if needed or set to 10 if it's the first allocation
+        products = realloc(products, product_capacity * sizeof(Product)); // Reallocate memory
         if (!products) {
             perror("realloc");
             return 1;
@@ -207,6 +218,7 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
     products[product_count].UnitPrice = UnitPrice;
     product_count++;
 
+    // Save to CSV file
     if(save_csv("products.csv")){
         printf("Failed to save CSV file.\n");
         return 1;
@@ -253,13 +265,16 @@ int update_product(const char *ProductID, const char *ProductName, int Quantity,
 int save_csv(const char *filename){
     FILE *fp;
 
+    // Check if file opens successfully
     if(!(fp = fopen(filename, "w"))){
         perror("fopen");
         return 1;
     }
 
+    // Write header
     fprintf(fp, "ProductID,ProductName,Quantity,UnitPrice\n");
 
+    // Write each product
     for(int i=0; i<product_count; i++){
         fprintf(fp, "%s,%s,%d,%d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
     }
@@ -282,9 +297,6 @@ void menu_list_products(){
     printf("──────────────────────────────────────────────────────────────\n");
 }
 
-#include <ctype.h>
-#include <string.h>
-
 void menu_search_product(){
     clear_screen();
     char keyword[100];
@@ -296,12 +308,14 @@ void menu_search_product(){
 
     printf("Enter Product ID or Name keyword or \033[1;31m~exit\033[0m to cancel: ");
     fgets(keyword, sizeof(keyword), stdin);
-    keyword[strcspn(keyword, "\r\n")] = '\0';
+    keyword[strcspn(keyword, "\r\n")] = '\0'; // Remove newline characters
 
+    // Check for exit command
     if(strcmp(keyword, "~exit") == 0){
         return;
     }
 
+    // Convert keyword to lowercase for case-insensitive search
     for (int i = 0; keyword[i]; i++) {
         keyword[i] = tolower((unsigned char)keyword[i]);
     }
@@ -315,12 +329,14 @@ void menu_search_product(){
         strcpy(id_lower, products[i].ProductID);
         strcpy(name_lower, products[i].ProductName);
 
+        // Convert to lowercase
         for (int j = 0; id_lower[j]; j++) {
             id_lower[j] = tolower((unsigned char)id_lower[j]);
         }
         for (int j = 0; name_lower[j]; j++) {
             name_lower[j] = tolower((unsigned char)name_lower[j]);
         }
+        //////////////////////
 
         if (strstr(id_lower, keyword) != NULL ||
             strstr(name_lower, keyword) != NULL) {
@@ -342,9 +358,6 @@ void menu_search_product(){
     printf("──────────────────────────────────────────────────────────────\n");
 }
 
-
-
-
 void menu_add_product(){
     char ProductID[20];
     char ProductName[100];
@@ -362,10 +375,12 @@ void menu_add_product(){
     while(getchar() != '\n');
     printf("\033[0m");
 
+    // Check for exit command
     if(strcmp(ProductID, "~exit") == 0){
         return;
     }
 
+    // Check for duplicate ProductID
     for(int i=0; i<product_count; i++){
         if(strcmp(products[i].ProductID, ProductID) == 0){
             printf("\033[1;31mDuplicate Product ID. Can't be this ID.\033[0m\n");
