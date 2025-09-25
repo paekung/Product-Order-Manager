@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <limits.h>
 
 // For Windows console UTF-8 support
 #ifdef _WIN32
@@ -183,7 +184,7 @@ void menu() {
                 wait_for_enter();
                 break;
             case 5: // Update product
-                printf("Updating a product...\n");
+                menu_update_product();
                 wait_for_enter();
                 break;
             case 0: // Exit
@@ -571,5 +572,140 @@ void menu_remove_product(){
 
     free(matches);
     free(to_delete);
+    printf("──────────────────────────────────────────────────────────────\n");
+}
+
+void menu_update_product(){
+    clear_screen();
+    printf("\033[1m");
+    printf("── Product Order Manager | Update Product ────────────────────\n\n");
+    printf("\033[0m");
+
+    if (product_count == 0){
+        printf("No products loaded.\n");
+        return;
+    }
+
+    char keyword[128];
+    printf("Enter Product ID or Name keyword or \033[1;31m~exit\033[0m to cancel: ");
+    if (!fgets(keyword, sizeof(keyword), stdin)) return;
+    keyword[strcspn(keyword, "\r\n")] = '\0';
+    if (strcmp(keyword, "~exit") == 0) return;
+
+    for (int i = 0; keyword[i]; i++) keyword[i] = (char)tolower((unsigned char)keyword[i]);
+
+    int *matches = (int*)malloc(sizeof(int) * (product_count > 0 ? product_count : 1));
+    if (!matches){ printf("\033[1;31mMemory allocation failed.\033[0m\n"); return; }
+    int mcount = 0;
+
+    printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n",
+           "ProductID","ProductName","Quantity","UnitPrice");
+
+    for (int i=0; i<product_count; i++){
+        char id[128], name[128];
+        strcpy(id, products[i].ProductID);
+        strcpy(name, products[i].ProductName);
+        for (int j=0; id[j]; j++) id[j] = (char)tolower((unsigned char)id[j]);
+        for (int j=0; name[j]; j++) name[j] = (char)tolower((unsigned char)name[j]);
+        if (strstr(id, keyword) || strstr(name, keyword)){
+            matches[mcount++] = i;
+            printf("%-3d%-10s %-20s %-10d %-10d\n",
+                   mcount,
+                   products[i].ProductID,
+                   products[i].ProductName,
+                   products[i].Quantity,
+                   products[i].UnitPrice);
+        }
+    }
+
+    if (mcount == 0){
+        printf("No product found.\n");
+        printf("──────────────────────────────────────────────────────────────\n");
+        free(matches);
+        return;
+    }
+
+    char choice[32];
+    int pick = -1;
+    printf("\nSelect ONE item number to update or \033[1;31m~exit\033[0m to cancel: ");
+    if (!fgets(choice, sizeof(choice), stdin)){ free(matches); return; }
+    choice[strcspn(choice, "\r\n")] = '\0';
+    if (strcmp(choice, "~exit") == 0){ free(matches); printf("\n\033[1;33mOperation cancelled.\033[0m\n"); return; }
+
+    pick = atoi(choice);
+    if (pick < 1 || pick > mcount){
+        printf("\033[1;31mInvalid selection.\033[0m\n");
+        free(matches);
+        return;
+    }
+
+    int idx = matches[pick - 1];
+    free(matches);
+
+    printf("\nEditing: \033[1m%s\033[0m | %s (Qty %d, Price %d)\n",
+           products[idx].ProductID,
+           products[idx].ProductName,
+           products[idx].Quantity,
+           products[idx].UnitPrice);
+
+    char buf[256];
+
+    char *newNamePtr = NULL;
+    char newName[100];
+    printf("New Product Name (leave blank to keep): ");
+    if (!fgets(buf, sizeof(buf), stdin)) return;
+    buf[strcspn(buf, "\r\n")] = '\0';
+    if (buf[0] != '\0'){
+        strncpy(newName, buf, sizeof(newName)-1);
+        newName[sizeof(newName)-1] = '\0';
+        newNamePtr = newName;
+    }
+
+    int newQty = -1;
+    while (1){
+        printf("New Quantity (leave blank to keep): ");
+        if (!fgets(buf, sizeof(buf), stdin)) return;
+        buf[strcspn(buf, "\r\n")] = '\0';
+        if (buf[0] == '\0'){ // keep
+            newQty = -1;
+            break;
+        }
+        char *endp = NULL;
+        long v = strtol(buf, &endp, 10);
+        if (endp != buf && *endp == '\0' && v >= 0 && v <= INT_MAX){
+            newQty = (int)v;
+            break;
+        }
+        printf("\033[1;31mPlease enter a non-negative integer.\033[0m\n");
+    }
+
+    int newPrice = -1;
+    while (1){
+        printf("New Unit Price (leave blank to keep): ");
+        if (!fgets(buf, sizeof(buf), stdin)) return;
+        buf[strcspn(buf, "\r\n")] = '\0';
+        if (buf[0] == '\0'){ // keep
+            newPrice = -1;
+            break;
+        }
+        char *endp = NULL;
+        long v = strtol(buf, &endp, 10);
+        if (endp != buf && *endp == '\0' && v >= 0 && v <= INT_MAX){
+            newPrice = (int)v;
+            break;
+        }
+        printf("\033[1;31mPlease enter a non-negative integer.\033[0m\n");
+    }
+
+    if (update_product(products[idx].ProductID, newNamePtr, newQty, newPrice) == 0){
+        if (save_csv("products.csv") == 0){
+            printf("\n\033[1;32mProduct updated successfully!\033[0m\n");
+        } else {
+            printf("\n\033[1;33mUpdated in memory, but failed to save CSV.\033[0m\n");
+        }
+    } else {
+        printf("\n\033[1;31mFailed to update product.\033[0m\n");
+    }
+
     printf("──────────────────────────────────────────────────────────────\n");
 }

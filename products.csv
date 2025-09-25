@@ -1,5 +1,4 @@
 ProductID,ProductName,Quantity,UnitPrice
-P001,Laptop,10,25000
 P002,Smartphone,15,15000
 P003,Tablet,20,12000
 P004,Smartwatch,25,8000
