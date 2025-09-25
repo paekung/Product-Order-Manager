@@ -330,6 +330,7 @@ int update_product(const char *ProductID, const char *ProductName, int Quantity,
     return 1;
 }
 
+// save products to CSV file
 int save_csv(const char *filename){
     FILE *fp;
 
@@ -362,6 +363,7 @@ void menu_list_products(){
     printf("──────────────────────────────────────────────────────────────\n");
 }
 
+// search products by keyword
 void menu_search_product(){
     clear_screen();
     char keyword[100];
@@ -406,6 +408,7 @@ void menu_search_product(){
     free(matches);
 }
 
+// add new product
 void menu_add_product(){
     char ProductID[20];
     char ProductName[100];
@@ -469,6 +472,7 @@ void menu_add_product(){
     }
 }
 
+// remove product by keyword search
 void menu_remove_product(){
     char keyword[100];
 
@@ -633,6 +637,7 @@ void menu_remove_product(){
     printf("──────────────────────────────────────────────────────────────\n");
 }
 
+// update product by keyword search
 void menu_update_product(){
     clear_screen();
     printf("\033[1m");
