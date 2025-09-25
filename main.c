@@ -34,6 +34,7 @@ void menu_add_product();
 void menu_search_product();
 void menu_remove_product();
 void menu_update_product();
+int find_products_by_keyword(const char *keyword, int **out_matches);
 /////////////////////////
 
 // Utility functions
@@ -252,6 +253,63 @@ int remove_product(const char *ProductID){
     return 1;
 }
 
+// find matching products by keyword (case-insensitive)
+int find_products_by_keyword(const char *keyword, int **out_matches){
+    if (!keyword || !out_matches){
+        return -1;
+    }
+
+    *out_matches = NULL;
+
+    size_t keyword_len = strlen(keyword);
+    char *keyword_lower = (char*)malloc(keyword_len + 1);
+    if (!keyword_lower){
+        return -1;
+    }
+
+    for (size_t i = 0; i < keyword_len; i++){
+        keyword_lower[i] = (char)tolower((unsigned char)keyword[i]);
+    }
+    keyword_lower[keyword_len] = '\0';
+
+    int capacity = product_count > 0 ? product_count : 1;
+    int *matches = (int*)malloc(sizeof(int) * capacity);
+    if (!matches){
+        free(keyword_lower);
+        return -1;
+    }
+
+    int count = 0;
+    for (int i = 0; i < product_count; i++){
+        char id_lower[sizeof(products[i].ProductID)];
+        char name_lower[sizeof(products[i].ProductName)];
+
+        strcpy(id_lower, products[i].ProductID);
+        strcpy(name_lower, products[i].ProductName);
+
+        for (int j = 0; id_lower[j]; j++){
+            id_lower[j] = (char)tolower((unsigned char)id_lower[j]);
+        }
+        for (int j = 0; name_lower[j]; j++){
+            name_lower[j] = (char)tolower((unsigned char)name_lower[j]);
+        }
+
+        if (strstr(id_lower, keyword_lower) != NULL || strstr(name_lower, keyword_lower) != NULL){
+            matches[count++] = i;
+        }
+    }
+
+    free(keyword_lower);
+
+    if (count == 0){
+        free(matches);
+        matches = NULL;
+    }
+
+    *out_matches = matches;
+    return count;
+}
+
 // update product by ProductID
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
     // Find product by ProductID then update it
@@ -307,7 +365,6 @@ void menu_list_products(){
 void menu_search_product(){
     clear_screen();
     char keyword[100];
-    int found = 0;
 
     printf("\033[1m");
     printf("── Product Order Manager | Search ────────────────────────────\n\n");
@@ -322,47 +379,31 @@ void menu_search_product(){
         return;
     }
 
-    // Convert keyword to lowercase for case-insensitive search
-    for (int i = 0; keyword[i]; i++) {
-        keyword[i] = tolower((unsigned char)keyword[i]);
+    int *matches = NULL;
+    int mcount = find_products_by_keyword(keyword, &matches);
+    if (mcount < 0){
+        printf("\033[1;31mMemory allocation failed.\033[0m\n");
+        return;
     }
 
     printf("\n\033[1;33m%-10s %-20s %-10s %-10s\033[0m\n",
            "ProductID","ProductName","Quantity","UnitPrice");
 
-    for (int i = 0; i < product_count; i++) {
-        char id_lower[100], name_lower[100];
-
-        strcpy(id_lower, products[i].ProductID);
-        strcpy(name_lower, products[i].ProductName);
-
-        // Convert to lowercase
-        for (int j = 0; id_lower[j]; j++) {
-            id_lower[j] = tolower((unsigned char)id_lower[j]);
-        }
-        for (int j = 0; name_lower[j]; j++) {
-            name_lower[j] = tolower((unsigned char)name_lower[j]);
-        }
-        //////////////////////
-
-        if (strstr(id_lower, keyword) != NULL ||
-            strstr(name_lower, keyword) != NULL) {
-
-            printf("%-10s %-20s %-10d %-10d\n",
-                products[i].ProductID,
-                products[i].ProductName,
-                products[i].Quantity,
-                products[i].UnitPrice);
-
-            found = 1;
-        }
-    }
-
-    if (!found) {
+    if (mcount == 0) {
         printf("No product found.\n");
+    } else {
+        for (int i = 0; i < mcount; i++) {
+            int idx = matches[i];
+            printf("%-10s %-20s %-10d %-10d\n",
+                products[idx].ProductID,
+                products[idx].ProductName,
+                products[idx].Quantity,
+                products[idx].UnitPrice);
+        }
     }
 
     printf("──────────────────────────────────────────────────────────────\n");
+    free(matches);
 }
 
 void menu_add_product(){
@@ -449,44 +490,31 @@ void menu_remove_product(){
         return;
     }
 
-    for (int i = 0; keyword[i]; i++) {
-        keyword[i] = tolower((unsigned char)keyword[i]);
-    }
-
-    int *matches = (int*)malloc(sizeof(int) * (product_count > 0 ? product_count : 1));
-    if (!matches) {
+    int *matches = NULL;
+    int mcount = find_products_by_keyword(keyword, &matches);
+    if (mcount < 0) {
         printf("\033[1;31mMemory allocation failed.\033[0m\n");
         return;
     }
-    int mcount = 0;
 
     printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n",
            "ProductID","ProductName","Quantity","UnitPrice");
-
-    for (int i = 0; i < product_count; i++) {
-        char id_lower[100], name_lower[100];
-        strcpy(id_lower, products[i].ProductID);
-        strcpy(name_lower, products[i].ProductName);
-
-        for (int j = 0; id_lower[j]; j++) id_lower[j] = tolower((unsigned char)id_lower[j]);
-        for (int j = 0; name_lower[j]; j++) name_lower[j] = tolower((unsigned char)name_lower[j]);
-
-        if (strstr(id_lower, keyword) || strstr(name_lower, keyword)) {
-            matches[mcount++] = i;
-            printf("%-3d%-10s %-20s %-10d %-10d\n",
-                   mcount,
-                   products[i].ProductID,
-                   products[i].ProductName,
-                   products[i].Quantity,
-                   products[i].UnitPrice);
-        }
-    }
 
     if (mcount == 0) {
         printf("No product found.\n");
         printf("──────────────────────────────────────────────────────────────\n");
         free(matches);
         return;
+    }
+
+    for (int i = 0; i < mcount; i++) {
+        int idx = matches[i];
+        printf("%-3d%-10s %-20s %-10d %-10d\n",
+               i + 1,
+               products[idx].ProductID,
+               products[idx].ProductName,
+               products[idx].Quantity,
+               products[idx].UnitPrice);
     }
 
     char choice[256];
@@ -622,37 +650,31 @@ void menu_update_product(){
     keyword[strcspn(keyword, "\r\n")] = '\0';
     if (strcmp(keyword, "~exit") == 0) return;
 
-    for (int i = 0; keyword[i]; i++) keyword[i] = (char)tolower((unsigned char)keyword[i]);
-
-    int *matches = (int*)malloc(sizeof(int) * (product_count > 0 ? product_count : 1));
-    if (!matches){ printf("\033[1;31mMemory allocation failed.\033[0m\n"); return; }
-    int mcount = 0;
+    int *matches = NULL;
+    int mcount = find_products_by_keyword(keyword, &matches);
+    if (mcount < 0){
+        printf("\033[1;31mMemory allocation failed.\033[0m\n");
+        return;
+    }
 
     printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n",
            "ProductID","ProductName","Quantity","UnitPrice");
-
-    for (int i=0; i<product_count; i++){
-        char id[128], name[128];
-        strcpy(id, products[i].ProductID);
-        strcpy(name, products[i].ProductName);
-        for (int j=0; id[j]; j++) id[j] = (char)tolower((unsigned char)id[j]);
-        for (int j=0; name[j]; j++) name[j] = (char)tolower((unsigned char)name[j]);
-        if (strstr(id, keyword) || strstr(name, keyword)){
-            matches[mcount++] = i;
-            printf("%-3d%-10s %-20s %-10d %-10d\n",
-                   mcount,
-                   products[i].ProductID,
-                   products[i].ProductName,
-                   products[i].Quantity,
-                   products[i].UnitPrice);
-        }
-    }
 
     if (mcount == 0){
         printf("No product found.\n");
         printf("──────────────────────────────────────────────────────────────\n");
         free(matches);
         return;
+    }
+
+    for (int i = 0; i < mcount; i++){
+        int idx = matches[i];
+        printf("%-3d%-10s %-20s %-10d %-10d\n",
+               i + 1,
+               products[idx].ProductID,
+               products[idx].ProductName,
+               products[idx].Quantity,
+               products[idx].UnitPrice);
     }
 
     char choice[32];
