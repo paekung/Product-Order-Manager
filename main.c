@@ -233,6 +233,25 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
     return 0;
 }
 
+// remove product by ProductID
+int remove_product(const char *ProductID){
+    if (!ProductID){
+        return 1;
+    }
+
+    for (int i = 0; i < product_count; i++){
+        if (strcmp(products[i].ProductID, ProductID) == 0){
+            for (int j = i; j < product_count - 1; j++){
+                products[j] = products[j + 1];
+            }
+            product_count--;
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 // update product by ProductID
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
     // Find product by ProductID then update it
@@ -557,17 +576,28 @@ void menu_remove_product(){
     int removed_ok = 0;
     for (int i = 0; i < del_count; i++) {
         int idx = to_delete[i];
-        for (int j = idx; j < product_count - 1; j++) {
-            products[j] = products[j + 1];
+        if (idx < 0 || idx >= product_count) {
+            continue;
         }
-        product_count--;
-        removed_ok++;
+
+        char id_copy[sizeof(products[0].ProductID)];
+        strcpy(id_copy, products[idx].ProductID);
+
+        if (remove_product(id_copy) == 0) {
+            removed_ok++;
+        } else {
+            printf("\033[1;31mFailed to remove product ID %s.\033[0m\n", id_copy);
+        }
     }
 
-    if (save_csv("products.csv") == 0) {
-        printf("\n\033[1;32mRemoved %d/%d item(s) successfully!\033[0m\n", removed_ok, del_count);
+    if (removed_ok > 0) {
+        if (save_csv("products.csv") == 0) {
+            printf("\n\033[1;32mRemoved %d/%d item(s) successfully!\033[0m\n", removed_ok, del_count);
+        } else {
+            printf("\033[1;31mRemoved in memory, but failed to save CSV file.\033[0m\n");
+        }
     } else {
-        printf("\033[1;31mRemoved in memory, but failed to save CSV file.\033[0m\n");
+        printf("\n\033[1;33mNo items were removed.\033[0m\n");
     }
 
     free(matches);
