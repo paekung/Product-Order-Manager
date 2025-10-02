@@ -4,16 +4,10 @@
 #include <ctype.h>
 #include <limits.h>
 #include <signal.h>
-#ifndef _WIN32
-#include <unistd.h>
-#include <termios.h>
-#include <sys/ioctl.h>
-#endif
 
 // For Windows console UTF-8 support
 #ifdef _WIN32
 #include <windows.h>
-#include <conio.h>
 #endif
 
 #include "helpers.h"
