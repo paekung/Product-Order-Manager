@@ -1226,51 +1226,70 @@ void menu_product_manager(){
                 max_visible = 1;
             }
 
-            if (product_offset < 0) {
-                product_offset = 0;
-            }
-
-            if (product_offset > mcount - 1) {
-                product_offset = mcount - 1;
-            }
-
-            visible_count = mcount - product_offset;
-            if (visible_count > max_visible) {
-                visible_count = max_visible;
-            }
-
-            has_more_above = (product_offset > 0);
-            has_more_below = (product_offset + visible_count < mcount);
-
-            int total_lines = visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0);
-            while (total_lines > max_visible && visible_count > 0) {
-                if (has_more_below) {
-                    visible_count--;
-                    has_more_below = (product_offset + visible_count < mcount);
-                } else if (has_more_above) {
-                    visible_count--;
-                    if (visible_count == 0 && mcount > 0) {
-                        visible_count = 1;
-                        has_more_above = 0;
-                    }
-                } else {
-                    break;
+            for (;;) {
+                if (product_offset < 0) {
+                    product_offset = 0;
                 }
-                total_lines = visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0);
-            }
 
-            if (visible_count < 1) {
-                visible_count = 1;
+                if (product_offset > mcount - 1) {
+                    product_offset = mcount - 1;
+                }
+
+                visible_count = mcount - product_offset;
+                if (visible_count > max_visible) {
+                    visible_count = max_visible;
+                }
+
                 has_more_above = (product_offset > 0);
                 has_more_below = (product_offset + visible_count < mcount);
-            }
 
-            if (visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0) > max_visible) {
-                if (has_more_below) {
-                    has_more_below = 0;
-                } else if (has_more_above) {
-                    has_more_above = 0;
+                int total_lines = visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0);
+                while (total_lines > max_visible && visible_count > 0) {
+                    if (has_more_below) {
+                        visible_count--;
+                        has_more_below = (product_offset + visible_count < mcount);
+                    } else if (has_more_above) {
+                        visible_count--;
+                        if (visible_count == 0 && mcount > 0) {
+                            visible_count = 1;
+                            has_more_above = 0;
+                        }
+                    } else {
+                        break;
+                    }
+                    total_lines = visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0);
                 }
+
+                if (visible_count < 1) {
+                    visible_count = 1;
+                    has_more_above = (product_offset > 0);
+                    has_more_below = (product_offset + visible_count < mcount);
+                }
+
+                if (selected >= product_start_index && selected < product_start_index + mcount) {
+                    int relative_index = selected - product_start_index;
+                    if (relative_index < product_offset) {
+                        product_offset = relative_index;
+                        continue;
+                    }
+                    if (relative_index >= product_offset + visible_count) {
+                        product_offset = relative_index - visible_count + 1;
+                        if (product_offset < 0) {
+                            product_offset = 0;
+                        }
+                        continue;
+                    }
+                }
+
+                if (visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0) > max_visible) {
+                    if (has_more_below) {
+                        has_more_below = 0;
+                    } else if (has_more_above) {
+                        has_more_above = 0;
+                    }
+                }
+
+                break;
             }
         }
 
