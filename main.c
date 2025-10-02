@@ -51,7 +51,10 @@ typedef enum {
     MENU_KEY_DIGIT,
     MENU_KEY_ESCAPE,
     MENU_KEY_BACKSPACE,
-    MENU_KEY_CHAR
+    MENU_KEY_CHAR,
+    MENU_KEY_SHORTCUT_RUN_TESTS,
+    MENU_KEY_SHORTCUT_EXIT,
+    MENU_KEY_SHORTCUT_ADD_PRODUCT
 } MenuKey;
 static MenuKey read_menu_key(int *out_digit, char *out_char);
 static int get_terminal_rows(void);
@@ -138,6 +141,15 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
         }
         return MENU_KEY_NONE;
     }
+    if (ch == 0x14) {
+        return MENU_KEY_SHORTCUT_RUN_TESTS;
+    }
+    if (ch == 0x11) {
+        return MENU_KEY_SHORTCUT_EXIT;
+    }
+    if (ch == 0x0E) {
+        return MENU_KEY_SHORTCUT_ADD_PRODUCT;
+    }
     if (ch == '\r') {
         return MENU_KEY_ENTER;
     }
@@ -189,6 +201,19 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
 
     if (ch == 127 || ch == 8) {
         result = MENU_KEY_BACKSPACE;
+        goto restore_termios;
+    }
+
+    if (ch == 0x14) {
+        result = MENU_KEY_SHORTCUT_RUN_TESTS;
+        goto restore_termios;
+    }
+    if (ch == 0x11) {
+        result = MENU_KEY_SHORTCUT_EXIT;
+        goto restore_termios;
+    }
+    if (ch == 0x0E) {
+        result = MENU_KEY_SHORTCUT_ADD_PRODUCT;
         goto restore_termios;
     }
 
@@ -1186,7 +1211,7 @@ void menu_product_manager(){
 
         int terminal_rows = get_terminal_rows();
         int status_lines = (status_msg[0] != '\0') ? 1 : 0;
-        int reserved_lines = 9 + status_lines; // header + filter info + instructions + blank + run tests + exit + spacer + add + table header (+status)
+        int reserved_lines = 10 + status_lines; // header + filter + instructions + shortcuts + blank + run + exit + add + blank + table header (+status)
         int available_rows = terminal_rows - reserved_lines;
         if (available_rows < 1) {
             available_rows = 1;
@@ -1326,27 +1351,29 @@ void menu_product_manager(){
             printf("Filter: \033[1;31m%s\033[0m | Matches: 0\n", filter_display);
         }
         printf("Use arrows to navigate. Type to filter, Backspace to erase, Enter selects.\n");
+        printf("Shortcuts: Ctrl+T run tests, Ctrl+N add product, Ctrl+Q exit.\n");
         printf("\n");
+
+        const char *action_run = "[*] Run unit tests";
+        const char *action_exit = "[0] Exit application";
+        const char *action_add = "[+] Add new product";
 
         if (selected == run_tests_index) {
-            printf("\033[1;34m> [*] Run unit tests\033[0m\n");
+            printf("\033[1;34m%s\033[0m\n", action_run);
         } else {
-            printf("  [*] Run unit tests\n");
+            printf("%s\n", action_run);
         }
-
         if (selected == exit_index) {
-            printf("\033[1;31m> [0] Exit application\033[0m\n");
+            printf("\033[1;31m%s\033[0m\n", action_exit);
         } else {
-            printf("  [0] Exit application\n");
+            printf("%s\n", action_exit);
         }
-
-        printf("\n");
-
         if (selected == add_product_index) {
-            printf("\033[1;32m> [+] Add new product\033[0m\n");
+            printf("\033[1;32m%s\033[0m\n", action_add);
         } else {
-            printf("  [+] Add new product\n");
+            printf("%s\n", action_add);
         }
+        printf("\n");
 
         printf("\033[1;33m  #  %-10s %-20s %10s %10s\033[0m\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
 
@@ -1390,6 +1417,17 @@ void menu_product_manager(){
         char typed = '\0';
         MenuKey key = read_menu_key(&digit, &typed);
 
+        if (key == MENU_KEY_SHORTCUT_ADD_PRODUCT) {
+            selected = add_product_index;
+            key = MENU_KEY_ENTER;
+        } else if (key == MENU_KEY_SHORTCUT_RUN_TESTS) {
+            selected = run_tests_index;
+            key = MENU_KEY_ENTER;
+        } else if (key == MENU_KEY_SHORTCUT_EXIT) {
+            selected = exit_index;
+            key = MENU_KEY_ENTER;
+        }
+
         int chosen_index = -1;
         size_t filter_len = strlen(filter);
 
@@ -1426,11 +1464,6 @@ void menu_product_manager(){
                     clear_screen();
                     int tests_result = run_unit_tests();
                     wait_for_enter();
-                    if (tests_result == 0) {
-                        snprintf(status_msg, sizeof(status_msg), "\033[1;32mUnit tests passed.\033[0m");
-                    } else {
-                        snprintf(status_msg, sizeof(status_msg), "\033[1;31mUnit tests failed.\033[0m");
-                    }
                     selected = (product_count > 0) ? product_start_index : add_product_index;
                     filter[0] = '\0';
                     product_offset = 0;
