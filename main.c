@@ -34,12 +34,8 @@ int add_product(const char *ProductID, const char *ProductName, int Quantity, in
 int remove_product(const char *ProductID);
 int update_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice);
 int save_csv(const char *filename);
-void menu();
-void menu_list_products();
 void menu_add_product();
-void menu_search_product();
-void menu_remove_product();
-void menu_update_product();
+void menu_product_manager();
 int find_products_by_keyword(const char *keyword, int **out_matches);
 int input_is_ctrl_x(const char *input);
 int input_is_ctrl_z(const char *input);
@@ -51,9 +47,11 @@ typedef enum {
     MENU_KEY_DOWN,
     MENU_KEY_ENTER,
     MENU_KEY_DIGIT,
-    MENU_KEY_ESCAPE
+    MENU_KEY_ESCAPE,
+    MENU_KEY_BACKSPACE,
+    MENU_KEY_CHAR
 } MenuKey;
-static MenuKey read_menu_key(int *out_digit);
+static MenuKey read_menu_key(int *out_digit, char *out_char);
 /////////////////////////
 
 // Utility functions
@@ -117,9 +115,12 @@ int read_line_allow_ctrl(char *buffer, size_t size) {
 }
 ////////////////////////
 
-static MenuKey read_menu_key(int *out_digit) {
+static MenuKey read_menu_key(int *out_digit, char *out_char) {
     if (out_digit) {
         *out_digit = -1;
+    }
+    if (out_char) {
+        *out_char = '\0';
     }
 
 #ifdef _WIN32
@@ -137,6 +138,9 @@ static MenuKey read_menu_key(int *out_digit) {
     if (ch == '\r') {
         return MENU_KEY_ENTER;
     }
+    if (ch == 8) {
+        return MENU_KEY_BACKSPACE;
+    }
     if (ch >= '0' && ch <= '9') {
         if (out_digit) {
             *out_digit = ch - '0';
@@ -145,6 +149,12 @@ static MenuKey read_menu_key(int *out_digit) {
     }
     if (ch == 27) {
         return MENU_KEY_ESCAPE;
+    }
+    if (isprint(ch)) {
+        if (out_char) {
+            *out_char = (char)ch;
+        }
+        return MENU_KEY_CHAR;
     }
     return MENU_KEY_NONE;
 #else
@@ -174,6 +184,11 @@ static MenuKey read_menu_key(int *out_digit) {
         goto restore_termios;
     }
 
+    if (ch == 127 || ch == 8) {
+        result = MENU_KEY_BACKSPACE;
+        goto restore_termios;
+    }
+
     if (ch >= '0' && ch <= '9') {
         if (out_digit) {
             *out_digit = ch - '0';
@@ -199,6 +214,14 @@ static MenuKey read_menu_key(int *out_digit) {
         goto restore_termios;
     }
 
+    if (isprint(ch)) {
+        if (out_char) {
+            *out_char = (char)ch;
+        }
+        result = MENU_KEY_CHAR;
+        goto restore_termios;
+    }
+
     if (ch == 3) {
         result = MENU_KEY_ESCAPE;
     }
@@ -216,10 +239,24 @@ typedef enum {
     INPUT_RESULT_BACK
 } InputResult;
 
+typedef enum {
+    PRODUCT_ACTION_NONE = 0,
+    PRODUCT_ACTION_UPDATED,
+    PRODUCT_ACTION_REMOVED
+} ProductActionResult;
+
+typedef enum {
+    EDIT_PRODUCT_CANCELLED = 0,
+    EDIT_PRODUCT_UPDATED,
+    EDIT_PRODUCT_FAILED
+} EditProductResult;
+
 static int product_id_exists(const char *ProductID);
 static InputResult prompt_product_id(char *ProductID, size_t size, int *hasProductID);
 static InputResult prompt_product_name(char *ProductName, size_t size, int *hasProductName);
 static InputResult prompt_integer_input(const char *prompt, const char *field_name, int *value, int *hasValue);
+static EditProductResult edit_product_prompt(Product *prod);
+static ProductActionResult product_manager_handle_action(int product_index, char *status_buf, size_t status_len);
 ////////////////////////
 
 static int input_matches_ctrl(const char *input, unsigned char control_value, char letter) {
@@ -452,9 +489,9 @@ int main(){
         return 1;
     };
 
-    // Show menu
-    menu();
-    
+    // Launch Product Order Manager as the main interface
+    menu_product_manager();
+
     // Free allocated memory
     free(products);
     return 0;
@@ -520,119 +557,6 @@ int load_csv(const char *filename){
 
     fclose(fp);
     return 0;
-}
-
-void menu() {
-    const int menu_values[] = {1, 2, 3, 4, 5, 0};
-    const char *menu_numbers[] = {"[1]", "[2]", "[3]", "[4]", "[5]", "[0]"};
-    const char *menu_labels[] = {
-        "List all products",
-        "Search products",
-        "Add a new product",
-        "Remove a product",
-        "Update a product",
-        "Exit"
-    };
-    const int menu_count = (int)(sizeof(menu_values) / sizeof(menu_values[0]));
-
-    int selected = 0;
-    int running = 1;
-    const char *status_msg = NULL;
-
-    while (running) {
-        int choice = -1;
-        while (choice == -1 && running) {
-            clear_screen();
-            printf("\033[0m");
-            printf("\033[1m");
-            printf("── Product Order Manager | Menu ───\n\n");
-            printf("\033[0m");
-            printf("\033[1;33mChoose an option:\033[0m\n");
-
-            for (int i = 0; i < menu_count; i++) {
-                if (i == selected) {
-                    printf("\033[1;32m> %s %s\033[0m\n", menu_numbers[i], menu_labels[i]);
-                } else {
-                    printf("  \033[1;32m%s\033[0m %s\n", menu_numbers[i], menu_labels[i]);
-                }
-            }
-
-            printf("\nUse Up ↑/Down ↓ arrows or number keys, then press Enter.\n");
-            if (status_msg) {
-                printf("%s\n", status_msg);
-                status_msg = NULL;
-            }
-
-            int digit = -1;
-            MenuKey key = read_menu_key(&digit);
-
-            switch (key) {
-                case MENU_KEY_UP:
-                    selected = (selected - 1 + menu_count) % menu_count;
-                    break;
-                case MENU_KEY_DOWN:
-                    selected = (selected + 1) % menu_count;
-                    break;
-                case MENU_KEY_ENTER:
-                    choice = menu_values[selected];
-                    break;
-                case MENU_KEY_DIGIT: {
-                    int found = 0;
-                    for (int i = 0; i < menu_count; i++) {
-                        if (menu_values[i] == digit) {
-                            selected = i;
-                            found = 1;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        status_msg = "\033[1;31mInvalid menu number.\033[0m";
-                    }
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-
-        if (!running) {
-            break;
-        }
-
-        switch (choice) {
-            case 1:
-                clear_screen();
-                printf("\033[1m");
-                printf("── Product Order Manager | Listing ───────────────────────────\n");
-                printf("\033[0m");
-                menu_list_products();
-                wait_for_enter();
-                break;
-            case 2:
-                menu_search_product();
-                wait_for_enter();
-                break;
-            case 3:
-                menu_add_product();
-                wait_for_enter();
-                break;
-            case 4:
-                menu_remove_product();
-                wait_for_enter();
-                break;
-            case 5:
-                menu_update_product();
-                wait_for_enter();
-                break;
-            case 0:
-                printf("Exiting the program...\n");
-                running = 0;
-                break;
-            default:
-                status_msg = "\033[1;31mInvalid choice!\033[0m";
-                break;
-        }
-    }
 }
 
 // add product
@@ -789,62 +713,6 @@ int save_csv(const char *filename){
     return 0;
 }
 
-// list all products
-void menu_list_products(){   
-    printf("\033[1;33m");
-    printf("%-10s %-20s %-10s %-10s\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
-    printf("\033[0m");
-    for(int i=0; i<product_count; i++){
-        printf("%-10s %-20s %-10d %-10d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
-    }
-    printf("──────────────────────────────────────────────────────────────\n");
-}
-
-// search products by keyword
-void menu_search_product(){
-    clear_screen();
-    char keyword[100];
-
-    printf("\033[1m");
-    printf("── Product Order Manager | Search ────────────────────────────\n\n");
-    printf("\033[0m");
-
-    printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    fgets(keyword, sizeof(keyword), stdin);
-    keyword[strcspn(keyword, "\r\n")] = '\0'; // Remove newline characters
-
-    // Check for exit command
-    if(input_is_ctrl_x(keyword)){
-        return;
-    }
-
-    int *matches = NULL;
-    int mcount = find_products_by_keyword(keyword, &matches);
-    if (mcount < 0){
-        printf("\033[1;31mMemory allocation failed.\033[0m\n");
-        return;
-    }
-
-    printf("\n\033[1;33m%-10s %-20s %-10s %-10s\033[0m\n",
-           "ProductID","ProductName","Quantity","UnitPrice");
-
-    if (mcount == 0) {
-        printf("No product found.\n");
-    } else {
-        for (int i = 0; i < mcount; i++) {
-            int idx = matches[i];
-            printf("%-10s %-20s %-10d %-10d\n",
-                products[idx].ProductID,
-                products[idx].ProductName,
-                products[idx].Quantity,
-                products[idx].UnitPrice);
-        }
-    }
-
-    printf("──────────────────────────────────────────────────────────────\n");
-    free(matches);
-}
-
 // add new product
 void menu_add_product(){
     char ProductID[20] = "";
@@ -945,249 +813,10 @@ void menu_add_product(){
     }
 }
 
-// remove product by keyword search
-void menu_remove_product(){
-    char keyword[100];
-
-    clear_screen();
-    printf("\033[1m");
-    printf("── Product Order Manager | Remove Product ────────────────────\n\n");
-    printf("\033[0m");
-
-    printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    printf("\033[1;33m");
-    if (!fgets(keyword, sizeof(keyword), stdin)) {
-        printf("\033[0m");
-        return;
+static EditProductResult edit_product_prompt(Product *prod) {
+    if (!prod) {
+        return EDIT_PRODUCT_CANCELLED;
     }
-    keyword[strcspn(keyword, "\r\n")] = '\0';
-    printf("\033[0m");
-
-    if(input_is_ctrl_x(keyword)){
-        return;
-    }
-
-    int *matches = NULL;
-    int mcount = find_products_by_keyword(keyword, &matches);
-    if (mcount < 0) {
-        printf("\033[1;31mMemory allocation failed.\033[0m\n");
-        return;
-    }
-
-    printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n",
-           "ProductID","ProductName","Quantity","UnitPrice");
-
-    if (mcount == 0) {
-        printf("No product found.\n");
-        printf("──────────────────────────────────────────────────────────────\n");
-        free(matches);
-        return;
-    }
-
-    for (int i = 0; i < mcount; i++) {
-        int idx = matches[i];
-        printf("%-3d%-10s %-20s %-10d %-10d\n",
-               i + 1,
-               products[idx].ProductID,
-               products[idx].ProductName,
-               products[idx].Quantity,
-               products[idx].UnitPrice);
-    }
-
-    char choice[256];
-    printf("\nSelect item number(s) to remove (e.g. 1,3) or type \033[1;33mall\033[0m to remove all, or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    printf("\033[1;33m");
-    if (!fgets(choice, sizeof(choice), stdin)) {
-        printf("\033[0m");
-        free(matches);
-        return;
-    }
-    choice[strcspn(choice, "\r\n")] = '\0';
-    printf("\033[0m");
-
-    if (input_is_ctrl_x(choice)) {
-        free(matches);
-        printf("\n\033[1;33mOperation cancelled.\033[0m\n");
-        return;
-    }
-
-    int *to_delete = (int*)malloc(sizeof(int) * mcount);
-    if (!to_delete) {
-        free(matches);
-        printf("\033[1;31mMemory allocation failed.\033[0m\n");
-        return;
-    }
-    int del_count = 0;
-
-    if (strcasecmp(choice, "all") == 0) {
-        for (int i = 0; i < mcount; i++) to_delete[del_count++] = matches[i];
-    } else {
-        char *token = strtok(choice, ",");
-        while (token) {
-            while (isspace((unsigned char)*token)) token++;
-            int num = atoi(token);
-            if (num >= 1 && num <= mcount) {
-                int idx = matches[num - 1];
-                int dup = 0;
-                for (int k = 0; k < del_count; k++) if (to_delete[k] == idx) { dup = 1; break; }
-                if (!dup) to_delete[del_count++] = idx;
-            } else {
-                printf("\033[1;31mIgnored invalid selection: %s\033[0m\n", token);
-            }
-            token = strtok(NULL, ",");
-        }
-
-        if (del_count == 0) {
-            free(matches);
-            free(to_delete);
-            printf("\n\033[1;33mNothing selected. Operation cancelled.\033[0m\n");
-            return;
-        }
-    }
-
-    printf("\nYou are about to remove %d item(s):\n", del_count);
-    for (int i = 0; i < del_count; i++) {
-        int idx = to_delete[i];
-        printf("\033[1;31m");
-        printf(" - %s | %s\n", products[idx].ProductID, products[idx].ProductName);
-        printf("\033[0m");
-    }
-
-    char confirm[8];
-    printf("\nAre you sure? (y/n): ");
-    printf("\033[1;33m");
-    if (!fgets(confirm, sizeof(confirm), stdin)) {
-        printf("\033[0m");
-        free(matches); free(to_delete);
-        return;
-    }
-    confirm[strcspn(confirm, "\r\n")] = '\0';
-    printf("\033[0m");
-
-    if (!(strcmp(confirm, "y") == 0 || strcmp(confirm, "Y") == 0)) {
-        printf("\n\033[1;33mOperation cancelled.\033[0m\n");
-        free(matches); free(to_delete);
-        return;
-    }
-
-    for (int i = 0; i < del_count - 1; i++) {
-        for (int j = i + 1; j < del_count; j++) {
-            if (to_delete[i] < to_delete[j]) {
-                int t = to_delete[i]; to_delete[i] = to_delete[j]; to_delete[j] = t;
-            }
-        }
-    }
-
-    int removed_ok = 0;
-    for (int i = 0; i < del_count; i++) {
-        int idx = to_delete[i];
-        if (idx < 0 || idx >= product_count) {
-            continue;
-        }
-
-        char id_copy[sizeof(products[0].ProductID)];
-        strcpy(id_copy, products[idx].ProductID);
-
-        if (remove_product(id_copy) == 0) {
-            removed_ok++;
-        } else {
-            printf("\033[1;31mFailed to remove product ID %s.\033[0m\n", id_copy);
-        }
-    }
-
-    if (removed_ok > 0) {
-        if (save_csv("products.csv") == 0) {
-            printf("\n\033[1;32mRemoved %d/%d item(s) successfully!\033[0m\n", removed_ok, del_count);
-        } else {
-            printf("\033[1;31mRemoved in memory, but failed to save CSV file.\033[0m\n");
-        }
-    } else {
-        printf("\n\033[1;33mNo items were removed.\033[0m\n");
-    }
-
-    free(matches);
-    free(to_delete);
-    printf("──────────────────────────────────────────────────────────────\n");
-}
-
-// update product by keyword search
-void menu_update_product(){
-    clear_screen();
-    printf("\033[1m");
-    printf("── Product Order Manager | Update Product ────────────────────\n\n");
-    printf("\033[0m");
-
-    if (product_count == 0){
-        printf("No products loaded.\n");
-        return;
-    }
-
-    char keyword[128];
-    printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    printf("\033[1;33m");
-    if (!fgets(keyword, sizeof(keyword), stdin)){
-        printf("\033[0m");
-        return;
-    }
-    keyword[strcspn(keyword, "\r\n")] = '\0';
-    printf("\033[0m");
-    if (input_is_ctrl_x(keyword)){
-        return;
-    }
-
-    int *matches = NULL;
-    int mcount = find_products_by_keyword(keyword, &matches);
-    if (mcount < 0){
-        printf("\033[1;31mMemory allocation failed.\033[0m\n");
-        return;
-    }
-
-    printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n",
-           "ProductID","ProductName","Quantity","UnitPrice");
-
-    if (mcount == 0){
-        printf("No product found.\n");
-        printf("──────────────────────────────────────────────────────────────\n");
-        free(matches);
-        return;
-    }
-
-    for (int i = 0; i < mcount; i++){
-        int idx = matches[i];
-        printf("%-3d%-10s %-20s %-10d %-10d\n",
-               i + 1,
-               products[idx].ProductID,
-               products[idx].ProductName,
-               products[idx].Quantity,
-               products[idx].UnitPrice);
-    }
-
-    char choice[32];
-    int pick = -1;
-    printf("\nSelect ONE item number to update or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    printf("\033[1;33m");
-    if (!fgets(choice, sizeof(choice), stdin)){
-        printf("\033[0m");
-        free(matches);
-        return;
-    }
-    choice[strcspn(choice, "\r\n")] = '\0';
-    printf("\033[0m");
-    if (input_is_ctrl_x(choice)){
-        free(matches);
-        return;
-    }
-
-    pick = atoi(choice);
-    if (pick < 1 || pick > mcount){
-        printf("\033[1;31mInvalid selection.\033[0m\n");
-        free(matches);
-        return;
-    }
-
-    int idx = matches[pick - 1];
-    Product *prod = &products[idx];
-    free(matches);
 
     char ProductName[100];
     strncpy(ProductName, prod->ProductName, sizeof(ProductName) - 1);
@@ -1203,19 +832,27 @@ void menu_update_product(){
     while (stage >= 0 && stage < 3) {
         clear_screen();
         printf("\033[1m── Product Order Manager | Update Product ────────────────────\033[0m\n\n");
-        printf("Editing Product ID: %s\n", prod->ProductID);
-        printf("Product Name: %s\n", hasProductName ? ProductName : "");
+        printf("\033[1;33mProduct ID:\033[0m %s\n", prod->ProductID);
+
+        const char *name_marker = stage == 0 ? "\033[1;33m>\033[0m" : "  ";
+        const char *qty_marker  = stage == 1 ? "\033[1;33m>\033[0m" : "  ";
+        const char *price_marker = stage == 2 ? "\033[1;33m>\033[0m" : "  ";
+
+        printf("%s \033[1;32mProduct Name:\033[0m %s\n",
+               name_marker,
+               hasProductName ? ProductName : "");
         if (hasQuantity) {
-            printf("Quantity: %d\n", Quantity);
+            printf("%s \033[1;32mQuantity:\033[0m %d\n", qty_marker, Quantity);
         } else {
-            printf("Quantity: \n");
+            printf("%s \033[1;32mQuantity:\033[0m \n", qty_marker);
         }
         if (hasUnitPrice) {
-            printf("Unit Price: %d\n", UnitPrice);
+            printf("%s \033[1;32mUnit Price:\033[0m %d\n", price_marker, UnitPrice);
         } else {
-            printf("Unit Price: \n");
+            printf("%s \033[1;32mUnit Price:\033[0m \n", price_marker);
         }
-        printf("\n");
+
+        printf("\n\033[1;32mTip:\033[0m Use Ctrl+Z to go back, Ctrl+X to cancel. Highlighted field shows the current step.\n\n");
         if (status_msg) {
             printf("%s\n\n", status_msg);
         }
@@ -1226,7 +863,7 @@ void menu_update_product(){
             case 0:
                 result = prompt_product_name(ProductName, sizeof(ProductName), &hasProductName);
                 if (result == INPUT_RESULT_CANCEL) {
-                    return;
+                    return EDIT_PRODUCT_CANCELLED;
                 }
                 if (result == INPUT_RESULT_BACK) {
                     status_msg = "\033[1;33mAlready at the first input.\033[0m";
@@ -1238,7 +875,7 @@ void menu_update_product(){
             case 1:
                 result = prompt_integer_input("Enter Quantity", "Quantity", &Quantity, &hasQuantity);
                 if (result == INPUT_RESULT_CANCEL) {
-                    return;
+                    return EDIT_PRODUCT_CANCELLED;
                 }
                 if (result == INPUT_RESULT_BACK) {
                     stage = 0;
@@ -1250,7 +887,7 @@ void menu_update_product(){
             case 2:
                 result = prompt_integer_input("Enter Unit Price", "Unit Price", &UnitPrice, &hasUnitPrice);
                 if (result == INPUT_RESULT_CANCEL) {
-                    return;
+                    return EDIT_PRODUCT_CANCELLED;
                 }
                 if (result == INPUT_RESULT_BACK) {
                     stage = 1;
@@ -1260,23 +897,351 @@ void menu_update_product(){
                 break;
 
             default:
-                return;
+                return EDIT_PRODUCT_CANCELLED;
         }
     }
 
     if (stage != 3) {
-        return;
+        return EDIT_PRODUCT_CANCELLED;
     }
 
-    if (update_product(prod->ProductID, ProductName, Quantity, UnitPrice) == 0){
-        if (save_csv("products.csv") == 0){
+    EditProductResult result = EDIT_PRODUCT_FAILED;
+    if (update_product(prod->ProductID, ProductName, Quantity, UnitPrice) == 0) {
+        result = EDIT_PRODUCT_UPDATED;
+        if (save_csv("products.csv") == 0) {
             printf("\n\033[1;32mProduct updated successfully!\033[0m\n");
         } else {
             printf("\n\033[1;33mUpdated in memory, but failed to save CSV.\033[0m\n");
         }
     } else {
         printf("\n\033[1;31mFailed to update product.\033[0m\n");
+        result = EDIT_PRODUCT_FAILED;
     }
 
     printf("──────────────────────────────────────────────────────────────\n");
+    return result;
+}
+
+static ProductActionResult product_manager_handle_action(int product_index, char *status_buf, size_t status_len) {
+    if (status_buf && status_len > 0) {
+        status_buf[0] = '\0';
+    }
+
+    if (product_index < 0 || product_index >= product_count) {
+        if (status_buf && status_len > 0) {
+            snprintf(status_buf, status_len, "\033[1;31mProduct not found.\033[0m");
+        }
+        return PRODUCT_ACTION_NONE;
+    }
+
+    const int action_values[] = {1, 2, 0};
+    const char *action_numbers[] = {"[1]", "[2]", "[0]"};
+    const char *action_labels[] = {
+        "Update product",
+        "Remove product",
+        "Back"
+    };
+    const int action_count = (int)(sizeof(action_values) / sizeof(action_values[0]));
+
+    int selected = 0;
+    const char *local_msg = NULL;
+
+    while (1) {
+        if (product_index < 0 || product_index >= product_count) {
+            if (status_buf && status_len > 0) {
+                snprintf(status_buf, status_len, "\033[1;31mProduct no longer available.\033[0m");
+            }
+            return PRODUCT_ACTION_NONE;
+        }
+
+        Product *prod = &products[product_index];
+
+        clear_screen();
+        printf("\033[1m── Product Order Manager | Actions ────────────────────────────────\033[0m\n\n");
+        printf("\033[1;33mProduct ID:\033[0m %s\n", prod->ProductID);
+        printf("\033[1;33mName:\033[0m %s\n", prod->ProductName);
+        printf("\033[1;33mQuantity:\033[0m %d\n", prod->Quantity);
+        printf("\033[1;33mUnit Price:\033[0m %d\n\n", prod->UnitPrice);
+
+        printf("Choose an action:\n");
+        for (int i = 0; i < action_count; i++) {
+            if (i == selected) {
+                printf("\033[1;32m> %s %s\033[0m\n", action_numbers[i], action_labels[i]);
+            } else {
+                printf("  \033[1;32m%s\033[0m %s\n", action_numbers[i], action_labels[i]);
+            }
+        }
+
+        printf("\nUse arrows or number keys. Enter to confirm.\n");
+        if (local_msg) {
+            printf("%s\n", local_msg);
+            local_msg = NULL;
+        }
+
+        int digit = -1;
+        char typed = '\0';
+        MenuKey key = read_menu_key(&digit, &typed);
+
+        switch (key) {
+            case MENU_KEY_UP:
+                selected = (selected - 1 + action_count) % action_count;
+                break;
+            case MENU_KEY_DOWN:
+                selected = (selected + 1) % action_count;
+                break;
+            case MENU_KEY_DIGIT: {
+                int found = 0;
+                for (int i = 0; i < action_count; i++) {
+                    if (action_values[i] == digit) {
+                        selected = i;
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found) {
+                    local_msg = "\033[1;31mInvalid choice.\033[0m";
+                }
+                break;
+            }
+            case MENU_KEY_ENTER: {
+                int choice = action_values[selected];
+                switch (choice) {
+                    case 1: {
+                        EditProductResult edit_res = edit_product_prompt(prod);
+                        if (edit_res == EDIT_PRODUCT_UPDATED) {
+                            wait_for_enter();
+                            if (status_buf && status_len > 0) {
+                                snprintf(status_buf, status_len, "\033[1;32mProduct updated.\033[0m");
+                            }
+                            return PRODUCT_ACTION_UPDATED;
+                        } else if (edit_res == EDIT_PRODUCT_FAILED) {
+                            wait_for_enter();
+                            local_msg = "\033[1;31mUpdate failed.\033[0m";
+                        } else {
+                            local_msg = "\033[1;33mUpdate cancelled.\033[0m";
+                        }
+                        break;
+                    }
+                    case 2: {
+                        char id_copy[sizeof(prod->ProductID)];
+                        char name_copy[sizeof(prod->ProductName)];
+                        strncpy(id_copy, prod->ProductID, sizeof(id_copy) - 1);
+                        id_copy[sizeof(id_copy) - 1] = '\0';
+                        strncpy(name_copy, prod->ProductName, sizeof(name_copy) - 1);
+                        name_copy[sizeof(name_copy) - 1] = '\0';
+                        int qty = prod->Quantity;
+                        int price = prod->UnitPrice;
+
+                        clear_screen();
+                        printf("\033[1m── Product Order Manager | Remove ────────────────────────────────\033[0m\n\n");
+                        printf("Removing: %s | %s (Qty %d, Price %d)\n", id_copy, name_copy, qty, price);
+                        printf("Type y to confirm, n to cancel, or press \033[1;31mCtrl+X\033[0m to abort: ");
+                        printf("\033[1;33m");
+                        char confirm[32];
+                        if (!fgets(confirm, sizeof(confirm), stdin)) {
+                            printf("\033[0m\n");
+                            local_msg = "\033[1;33mRemoval cancelled.\033[0m";
+                            break;
+                        }
+                        printf("\033[0m\n");
+                        confirm[strcspn(confirm, "\r\n")] = '\0';
+
+                        if (input_is_ctrl_x(confirm) || confirm[0] == '\0') {
+                            local_msg = "\033[1;33mRemoval cancelled.\033[0m";
+                            break;
+                        }
+
+                        if (!(confirm[0] == 'y' || confirm[0] == 'Y')) {
+                            local_msg = "\033[1;33mRemoval cancelled.\033[0m";
+                            break;
+                        }
+
+                        if (remove_product(id_copy) == 0) {
+                            if (save_csv("products.csv") == 0) {
+                                printf("\033[1;32mRemoved successfully.\033[0m\n");
+                                if (status_buf && status_len > 0) {
+                                    snprintf(status_buf, status_len, "\033[1;32mProduct removed.\033[0m");
+                                }
+                            } else {
+                                printf("\033[1;33mRemoved in memory, failed to save CSV.\033[0m\n");
+                                if (status_buf && status_len > 0) {
+                                    snprintf(status_buf, status_len, "\033[1;33mProduct removed, but CSV save failed.\033[0m");
+                                }
+                            }
+                            wait_for_enter();
+                            return PRODUCT_ACTION_REMOVED;
+                        } else {
+                            printf("\033[1;31mFailed to remove product.\033[0m\n");
+                            wait_for_enter();
+                            local_msg = "\033[1;31mRemoval failed.\033[0m";
+                        }
+                        break;
+                    }
+                    default:
+                        if (status_buf && status_len > 0) {
+                            status_buf[0] = '\0';
+                        }
+                        return PRODUCT_ACTION_NONE;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+}
+
+void menu_product_manager(){
+    int selected = (product_count > 0) ? 1 : 0;
+    char filter[128];
+    filter[0] = '\0';
+    char status_msg[256];
+    status_msg[0] = '\0';
+    int running = 1;
+
+    while (running) {
+        int *matches = NULL;
+        int mcount = find_products_by_keyword(filter, &matches);
+        if (mcount < 0) {
+            clear_screen();
+            printf("\033[1m── Product Order Manager ───────────────────────────────────────────\n\n\033[0m");
+            printf("\033[1;31mMemory allocation failed.\033[0m\n");
+            wait_for_enter();
+            return;
+        }
+
+        int display_count = mcount + 2; // extra rows for Add new product and Exit
+        if (display_count == 0) {
+            display_count = 1;
+        }
+        if (selected >= display_count) {
+            selected = display_count - 1;
+        }
+
+        clear_screen();
+        printf("\033[1m── Product Order Manager ───────────────────────────────────────────\n\n\033[0m");
+        printf("Filter: %s\n", filter[0] ? filter : "<none>");
+        printf("Use arrows to navigate. Type to filter, Backspace to erase. Enter selects. Choose [0] to exit.\n");
+        printf("Select [+] Add new product to create items quickly.\n\n");
+
+        if (selected == 0) {
+            printf("\033[1;32m> [+] Add new product\033[0m\n");
+        } else {
+            printf("  [+] Add new product\n");
+        }
+
+        printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
+
+        if (mcount == 0) {
+            printf("No products match the filter.\n");
+        } else {
+            for (int i = 0; i < mcount; i++) {
+                int idx = matches[i];
+                int display_index = i + 1;
+                if (display_index == selected) {
+                    printf("\033[1;32m> %-2d%-10s %-20s %-10d %-10d\033[0m\n",
+                           i + 1,
+                           products[idx].ProductID,
+                           products[idx].ProductName,
+                           products[idx].Quantity,
+                           products[idx].UnitPrice);
+                } else {
+                    printf("  %-2d%-10s %-20s %-10d %-10d\n",
+                           i + 1,
+                           products[idx].ProductID,
+                           products[idx].ProductName,
+                           products[idx].Quantity,
+                           products[idx].UnitPrice);
+                }
+            }
+        }
+
+        printf("\n");
+        if (selected == display_count - 1) {
+            printf("\033[1;31m> [0] Exit application\033[0m\n");
+        } else {
+            printf("  [0] Exit application\n");
+        }
+
+        if (status_msg[0] != '\0') {
+            printf("\n%s\n", status_msg);
+            status_msg[0] = '\0';
+        }
+
+        int digit = -1;
+        char typed = '\0';
+        MenuKey key = read_menu_key(&digit, &typed);
+
+        int chosen_index = -1;
+        size_t filter_len = strlen(filter);
+
+        switch (key) {
+            case MENU_KEY_UP:
+                if (display_count > 0) {
+                    selected = (selected - 1 + display_count) % display_count;
+                }
+                break;
+            case MENU_KEY_DOWN:
+                if (display_count > 0) {
+                    selected = (selected + 1) % display_count;
+                }
+                break;
+            case MENU_KEY_ENTER:
+                if (selected == 0) {
+                    int before_count = product_count;
+                    free(matches);
+                    matches = NULL;
+                    menu_add_product();
+                    wait_for_enter();
+                    if (product_count > before_count) {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;32mProduct added.\033[0m");
+                        selected = (product_count > 0) ? 1 : 0;
+                        filter[0] = '\0';
+                    } else {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;33mNo product added.\033[0m");
+                    }
+                    continue;
+                } else if (selected == display_count - 1) {
+                    free(matches);
+                    matches = NULL;
+                    running = 0;
+                    continue;
+                }
+                if (mcount > 0 && selected - 1 >= 0 && selected - 1 < mcount) {
+                    chosen_index = matches[selected - 1];
+                }
+                break;
+            case MENU_KEY_DIGIT:
+                if (filter_len < sizeof(filter) - 1) {
+                    filter[filter_len] = (char)('0' + digit);
+                    filter[filter_len + 1] = '\0';
+                    selected = (mcount > 0) ? 1 : (display_count - 1);
+                }
+                break;
+            case MENU_KEY_CHAR:
+                if (filter_len < sizeof(filter) - 1 && typed != '\0') {
+                    filter[filter_len] = typed;
+                    filter[filter_len + 1] = '\0';
+                    selected = (mcount > 0) ? 1 : (display_count - 1);
+                }
+                break;
+            case MENU_KEY_BACKSPACE:
+                if (filter_len > 0) {
+                    filter[filter_len - 1] = '\0';
+                    selected = (mcount > 0) ? 1 : (display_count - 1);
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (chosen_index >= 0) {
+            ProductActionResult action = product_manager_handle_action(chosen_index, status_msg, sizeof(status_msg));
+            if (action == PRODUCT_ACTION_REMOVED) {
+                selected = 0;
+            }
+        }
+
+        free(matches);
+    }
 }
