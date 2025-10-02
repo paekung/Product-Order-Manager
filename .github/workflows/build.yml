@@ -1,38 +1,32 @@
-name: C Build and Test
+name: Build
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
   workflow_dispatch:
-    inputs:
-      prerelease:
-        type: boolean
-        description: "Mark this as a pre-release?"
-        default: false
-  # push:
-  #   branches: [ main ]
-
-permissions:
-  contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build the C program
-        run: gcc -std=c17 -O2 -Wall -Wextra -Werror -o main main.c
+      - name: Show GCC version
+        run: gcc --version
 
-      - name: Run the program
-        run: ./main
+      - name: Build ProductOrderManager
+        run: gcc -std=c99 -Wall -Wextra -Werror main.c UnitTests.c E2E.c helpers.c -o ProductOrderManager
 
-      - name: Upload to Release
-        uses: ncipollo/release-action@v1
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          artifacts: "main,products.csv"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: v${{ github.run_number }}
-          name: "Release ${{ github.run_number }}"
-          body: "Automated release of the C program"
-          draft: false
-          prerelease: ${{ inputs.prerelease }}
+          name: ProductOrderManager-${{ matrix.os }}
+          path: |
+            ProductOrderManager
+            products.csv
