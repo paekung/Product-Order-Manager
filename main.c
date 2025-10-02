@@ -1311,10 +1311,10 @@ void menu_product_manager(){
         }
 
         clear_screen();
-        printf("\033[1m── Product Order Manager ───────────────────────────────────────────\033[0m\n");
+        printf("\033[1;33m── Product Order Manager ───────────────────────────────────────────\033[0m\n");
         const char *filter_display = filter[0] ? filter : "<none>";
         if (mcount > 0) {
-            printf("Filter: %s | Matches: %d | Page %d/%d (%d-%d of %d)\n",
+            printf("Filter: \033[1;32m%s\033[0m | Matches: %d | Page %d/%d (%d-%d of %d)\n",
                    filter_display,
                    mcount,
                    current_page,
@@ -1323,9 +1323,9 @@ void menu_product_manager(){
                    end_display,
                    mcount);
         } else {
-            printf("Filter: %s | Matches: 0\n", filter_display);
+            printf("Filter: \033[1;31m%s\033[0m | Matches: 0\n", filter_display);
         }
-        printf("Use arrows to navigate. Type to filter, Backspace to erase, Enter selects. List scrolls to fit your terminal.\n");
+        printf("Use arrows to navigate. Type to filter, Backspace to erase, Enter selects.\n");
         printf("\n");
 
         if (selected == run_tests_index) {
@@ -1348,7 +1348,7 @@ void menu_product_manager(){
             printf("  [+] Add new product\n");
         }
 
-        printf("  #  %-10s %-20s %10s %10s\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
+        printf("\033[1;33m  #  %-10s %-20s %10s %10s\033[0m\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
 
         if (mcount == 0) {
             printf("  (no products to display)\n");
