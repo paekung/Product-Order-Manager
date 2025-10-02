@@ -34,7 +34,7 @@ When the program starts it loads `products.csv` (creating it with a header if mi
 - Type any characters to filter products by ID or name; press `Backspace` to erase the filter.
 - Select a product and press `Enter` to open the action menu. Choose update or remove. Removal requires a `y` confirmation.
 - During add/update forms: `Ctrl+Z` steps back to the previous field, `Ctrl+X` aborts without changes. Empty product names or duplicate IDs are rejected.
-- Press `Ctrl+N` at any point to jump directly to the add-product flow.
+- Press `Ctrl+N` to jump directly to the add-product flow.
 - Press `Ctrl+T` to run the unit test suite or `Ctrl+E` to replay the scripted end-to-end scenario. Results are printed inline and the original CSV content is restored afterwards.
 - Exit with `Ctrl+Q` or by selecting the exit row.
 
