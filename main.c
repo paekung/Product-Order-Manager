@@ -60,6 +60,14 @@ static MenuKey read_menu_key(int *out_digit, char *out_char);
 static int get_terminal_rows(void);
 /////////////////////////
 
+static char lowercase_ascii_char(char c) {
+    unsigned char uc = (unsigned char)c;
+    if (uc >= 'A' && uc <= 'Z') {
+        return (char)(uc + ('a' - 'A'));
+    }
+    return (char)uc;
+}
+
 // Utility functions
 void clear_screen() {
     printf("\033[2J\033[H");
@@ -141,6 +149,7 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
         }
         return MENU_KEY_NONE;
     }
+    unsigned char uch = (unsigned char)ch;
     if (ch == 0x14) {
         return MENU_KEY_SHORTCUT_RUN_TESTS;
     }
@@ -156,18 +165,18 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
     if (ch == 8) {
         return MENU_KEY_BACKSPACE;
     }
-    if (ch >= '0' && ch <= '9') {
+    if (uch >= '0' && uch <= '9') {
         if (out_digit) {
-            *out_digit = ch - '0';
+            *out_digit = (int)(uch - '0');
         }
         return MENU_KEY_DIGIT;
     }
-    if (ch == 27) {
+    if (uch == 27) {
         return MENU_KEY_ESCAPE;
     }
-    if (isprint(ch)) {
+    if (uch >= 0x20 && uch != 0x7F) {
         if (out_char) {
-            *out_char = (char)ch;
+            *out_char = (char)uch;
         }
         return MENU_KEY_CHAR;
     }
@@ -194,6 +203,8 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
         goto restore_termios;
     }
 
+    unsigned char uch = (unsigned char)ch;
+
     if (ch == '\n' || ch == '\r') {
         result = MENU_KEY_ENTER;
         goto restore_termios;
@@ -217,15 +228,15 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
         goto restore_termios;
     }
 
-    if (ch >= '0' && ch <= '9') {
+    if (uch >= '0' && uch <= '9') {
         if (out_digit) {
-            *out_digit = ch - '0';
+            *out_digit = (int)(uch - '0');
         }
         result = MENU_KEY_DIGIT;
         goto restore_termios;
     }
 
-    if (ch == 27) {
+    if (uch == 27) {
         int ch1 = getchar();
         if (ch1 == '[') {
             int ch2 = getchar();
@@ -242,9 +253,9 @@ static MenuKey read_menu_key(int *out_digit, char *out_char) {
         goto restore_termios;
     }
 
-    if (isprint(ch)) {
+    if (uch >= 0x20 && uch != 0x7F) {
         if (out_char) {
-            *out_char = (char)ch;
+            *out_char = (char)uch;
         }
         result = MENU_KEY_CHAR;
         goto restore_termios;
@@ -334,7 +345,7 @@ static int input_matches_ctrl(const char *input, unsigned char control_value, ch
     if (len == 1 && (unsigned char)input[0] == control_value) {
         return 1;
     }
-    if (len == 2 && input[0] == '^' && (input[1] == letter || input[1] == (char)tolower((unsigned char)letter))) {
+    if (len == 2 && input[0] == '^' && (input[1] == letter || input[1] == lowercase_ascii_char(letter))) {
         return 1;
     }
 
@@ -697,7 +708,7 @@ int find_products_by_keyword(const char *keyword, int **out_matches){
     }
 
     for (size_t i = 0; i < keyword_len; i++){
-        keyword_lower[i] = (char)tolower((unsigned char)keyword[i]);
+        keyword_lower[i] = lowercase_ascii_char(keyword[i]);
     }
     keyword_lower[keyword_len] = '\0';
 
@@ -717,10 +728,10 @@ int find_products_by_keyword(const char *keyword, int **out_matches){
         strcpy(name_lower, products[i].ProductName);
 
         for (int j = 0; id_lower[j]; j++){
-            id_lower[j] = (char)tolower((unsigned char)id_lower[j]);
+            id_lower[j] = lowercase_ascii_char(id_lower[j]);
         }
         for (int j = 0; name_lower[j]; j++){
-            name_lower[j] = (char)tolower((unsigned char)name_lower[j]);
+            name_lower[j] = lowercase_ascii_char(name_lower[j]);
         }
 
         if (strstr(id_lower, keyword_lower) != NULL || strstr(name_lower, keyword_lower) != NULL){
@@ -1350,7 +1361,7 @@ void menu_product_manager(){
         } else {
             printf("Filter: \033[1;31m%s\033[0m | Matches: 0\n", filter_display);
         }
-        printf("Use arrows to navigate. Type to filter, Backspace to erase, Enter selects.\n");
+        printf("\033[4mUse arrows key to navigate\033[0m | Type to filter, Backspace to erase, Enter selects.\n");
         printf("Shortcuts: Ctrl+T run tests, Ctrl+N add product, Ctrl+Q exit.\n");
         printf("\n");
 
@@ -1464,6 +1475,11 @@ void menu_product_manager(){
                     clear_screen();
                     int tests_result = run_unit_tests();
                     wait_for_enter();
+                    if (tests_result == 0) {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;32mUnit tests passed.\033[0m");
+                    } else {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;31mUnit tests failed.\033[0m");
+                    }
                     selected = (product_count > 0) ? product_start_index : add_product_index;
                     filter[0] = '\0';
                     product_offset = 0;
