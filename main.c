@@ -36,6 +36,7 @@ void menu_remove_product();
 void menu_update_product();
 int find_products_by_keyword(const char *keyword, int **out_matches);
 int input_is_ctrl_x(const char *input);
+void trim_whitespace(char *str);
 /////////////////////////
 
 // Utility functions
@@ -45,8 +46,29 @@ void clear_screen() {
 
 void wait_for_enter() {
     printf("\033[1;32mPress Enter to back to menu...\033[0m");
-    fflush(stdout);
-    getchar();
+   fflush(stdout);
+   getchar();
+}
+////////////////////////
+
+void trim_whitespace(char *str) {
+    if (!str) {
+        return;
+    }
+
+    char *start = str;
+    while (*start && isspace((unsigned char)*start)) {
+        start++;
+    }
+    if (start != str) {
+        memmove(str, start, strlen(start) + 1);
+    }
+
+    char *end = str + strlen(str);
+    while (end > str && isspace((unsigned char)end[-1])) {
+        end--;
+    }
+    *end = '\0';
 }
 ////////////////////////
 
@@ -442,56 +464,131 @@ void menu_add_product(){
     char ProductName[100];
     int Quantity;
     int UnitPrice;
+    char buf[256];
 
     clear_screen();
     printf("\033[1m");
     printf("── Product Order Manager | Add Product ───────────────────────\n\n");
     printf("\033[0m");
 
-    printf("Enter Product ID or press \033[1;31mCtrl+X\033[0m to cancel : ");
-    printf("\033[1;33m");
-    scanf("%s", ProductID);
-    while(getchar() != '\n');
-    printf("\033[0m");
-
-    // Check for exit command
-    if(input_is_ctrl_x(ProductID)){
-        return;
-    }
-
-    // Check for duplicate ProductID
-    for(int i=0; i<product_count; i++){
-        if(strcmp(products[i].ProductID, ProductID) == 0){
-            printf("\033[1;31mDuplicate Product ID. Can't be this ID.\033[0m\n");
+    while (1) {
+        printf("Enter Product ID or press \033[1;31mCtrl+X\033[0m to cancel : ");
+        printf("\033[1;33m");
+        if (!fgets(buf, sizeof(buf), stdin)) {
+            printf("\033[0m");
             return;
         }
+        buf[strcspn(buf, "\r\n")] = '\0';
+        printf("\033[0m");
+
+        if (input_is_ctrl_x(buf)) {
+            return;
+        }
+
+        trim_whitespace(buf);
+        if (buf[0] == '\0') {
+            printf("\033[1;31mProduct ID cannot be empty.\033[0m\n");
+            continue;
+        }
+        if (strlen(buf) >= sizeof(ProductID)) {
+            printf("\033[1;31mProduct ID is too long (max %zu characters).\033[0m\n", sizeof(ProductID) - 1);
+            continue;
+        }
+
+        int duplicate = 0;
+        for (int i = 0; i < product_count; i++) {
+            if (strcmp(products[i].ProductID, buf) == 0) {
+                duplicate = 1;
+                break;
+            }
+        }
+        if (duplicate) {
+            printf("\033[1;31mDuplicate Product ID. Please enter a different ID.\033[0m\n");
+            continue;
+        }
+
+        strcpy(ProductID, buf);
+        break;
     }
 
     printf("Enter Product Name: ");
     printf("\033[1;33m");
-    fgets(ProductName, sizeof(ProductName), stdin);
-    ProductName[strcspn(ProductName, "\r\n")] = '\0';
+    if (!fgets(buf, sizeof(buf), stdin)) {
+        printf("\033[0m");
+        return;
+    }
+    buf[strcspn(buf, "\r\n")] = '\0';
     printf("\033[0m");
 
-    printf("Enter Quantity: ");
-    printf("\033[1;33m");
-    while (scanf("%d", &Quantity) != 1 || Quantity < 0) {
-        printf("\033[0m");
-        printf("Invalid input. Please enter a integer for Quantity: ");
-        while(getchar() != '\n');
+    if (input_is_ctrl_x(buf)) {
+        return;
     }
-    while(getchar() != '\n');
-    printf("\033[0m");
 
-    printf("Enter Unit Price: ");
-    printf("\033[1;33m");
-    while (scanf("%d", &UnitPrice) != 1 || UnitPrice < 0) {
+    trim_whitespace(buf);
+    strncpy(ProductName, buf, sizeof(ProductName) - 1);
+    ProductName[sizeof(ProductName) - 1] = '\0';
+
+    while (1) {
+        printf("Enter Quantity: ");
+        printf("\033[1;33m");
+        if (!fgets(buf, sizeof(buf), stdin)) {
+            printf("\033[0m");
+            return;
+        }
+        buf[strcspn(buf, "\r\n")] = '\0';
         printf("\033[0m");
-        printf("Invalid input. Please enter a integer for Unit Price: ");
-        while(getchar() != '\n');
+
+        if (input_is_ctrl_x(buf)) {
+            return;
+        }
+
+        trim_whitespace(buf);
+        if (buf[0] == '\0') {
+            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Quantity.\033[0m\n");
+            continue;
+        }
+
+        char *endp = NULL;
+        long value = strtol(buf, &endp, 10);
+        if (endp == buf || *endp != '\0' || value < 0 || value > INT_MAX) {
+            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Quantity.\033[0m\n");
+            continue;
+        }
+
+        Quantity = (int)value;
+        break;
     }
-    while(getchar() != '\n');
-    printf("\033[0m");
+
+    while (1) {
+        printf("Enter Unit Price: ");
+        printf("\033[1;33m");
+        if (!fgets(buf, sizeof(buf), stdin)) {
+            printf("\033[0m");
+            return;
+        }
+        buf[strcspn(buf, "\r\n")] = '\0';
+        printf("\033[0m");
+
+        if (input_is_ctrl_x(buf)) {
+            return;
+        }
+
+        trim_whitespace(buf);
+        if (buf[0] == '\0') {
+            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Unit Price.\033[0m\n");
+            continue;
+        }
+
+        char *endp = NULL;
+        long value = strtol(buf, &endp, 10);
+        if (endp == buf || *endp != '\0' || value < 0 || value > INT_MAX) {
+            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Unit Price.\033[0m\n");
+            continue;
+        }
+
+        UnitPrice = (int)value;
+        break;
+    }
 
     if(add_product(ProductID, ProductName, Quantity, UnitPrice) == 0){
         printf("\n\033[1;32mProduct added successfully!\033[0m\n");
