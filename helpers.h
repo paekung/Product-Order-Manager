@@ -13,9 +13,17 @@ typedef enum {
     MENU_KEY_BACKSPACE,
     MENU_KEY_CHAR,
     MENU_KEY_SHORTCUT_RUN_TESTS,
+    MENU_KEY_SHORTCUT_RUN_E2E,
     MENU_KEY_SHORTCUT_EXIT,
     MENU_KEY_SHORTCUT_ADD_PRODUCT
 } MenuKey;
+
+typedef struct {
+    MenuKey (*read_menu_key)(int *out_digit, char *out_char);
+    int (*read_line_allow_ctrl)(char *buffer, size_t size);
+    void (*wait_for_enter)(void);
+    void (*clear_screen)(void);
+} HelpersHooks;
 
 void clear_screen(void);
 void wait_for_enter(void);
@@ -26,5 +34,6 @@ int input_is_ctrl_x(const char *input);
 int input_is_ctrl_z(const char *input);
 MenuKey read_menu_key(int *out_digit, char *out_char);
 int get_terminal_rows(void);
+void helpers_set_hooks(const HelpersHooks *hooks);
 
 #endif // HELPERS_H

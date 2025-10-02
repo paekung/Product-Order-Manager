@@ -23,11 +23,29 @@ char lowercase_ascii_char(char c) {
     return (char)uc;
 }
 
+static HelpersHooks g_test_hooks = {0};
+
+void helpers_set_hooks(const HelpersHooks *hooks) {
+    if (hooks) {
+        g_test_hooks = *hooks;
+    } else {
+        memset(&g_test_hooks, 0, sizeof(g_test_hooks));
+    }
+}
+
 void clear_screen(void) {
+    if (g_test_hooks.clear_screen) {
+        g_test_hooks.clear_screen();
+        return;
+    }
     printf("\033[2J\033[H");
 }
 
 void wait_for_enter(void) {
+    if (g_test_hooks.wait_for_enter) {
+        g_test_hooks.wait_for_enter();
+        return;
+    }
     printf("\033[1;32mPress Enter to back to menu...\033[0m");
     fflush(stdout);
     getchar();
@@ -56,6 +74,10 @@ void trim_whitespace(char *str) {
 int read_line_allow_ctrl(char *buffer, size_t size) {
     if (!buffer || size == 0) {
         return 0;
+    }
+
+    if (g_test_hooks.read_line_allow_ctrl) {
+        return g_test_hooks.read_line_allow_ctrl(buffer, size);
     }
 
 #ifndef _WIN32
@@ -121,6 +143,10 @@ MenuKey read_menu_key(int *out_digit, char *out_char) {
         *out_char = '\0';
     }
 
+    if (g_test_hooks.read_menu_key) {
+        return g_test_hooks.read_menu_key(out_digit, out_char);
+    }
+
 #ifdef _WIN32
     int ch = _getch();
     if (ch == 0 || ch == 0xE0) {
@@ -136,6 +162,9 @@ MenuKey read_menu_key(int *out_digit, char *out_char) {
     unsigned char uch = (unsigned char)ch;
     if (ch == 0x14) {
         return MENU_KEY_SHORTCUT_RUN_TESTS;
+    }
+    if (ch == 0x05) {
+        return MENU_KEY_SHORTCUT_RUN_E2E;
     }
     if (ch == 0x11) {
         return MENU_KEY_SHORTCUT_EXIT;
@@ -201,6 +230,10 @@ MenuKey read_menu_key(int *out_digit, char *out_char) {
 
     if (ch == 0x14) {
         result = MENU_KEY_SHORTCUT_RUN_TESTS;
+        goto restore_termios;
+    }
+    if (ch == 0x05) {
+        result = MENU_KEY_SHORTCUT_RUN_E2E;
         goto restore_termios;
     }
     if (ch == 0x11) {

@@ -34,6 +34,7 @@ int save_csv(const char *filename);
 void menu_add_product();
 void menu_product_manager();
 int run_unit_tests(void);
+int run_e2e_tests(void);
 int find_products_by_keyword(const char *keyword, int **out_matches);
 int ensure_csv_exists(const char *filename);
 /////////////////////////
@@ -851,7 +852,7 @@ static ProductActionResult product_manager_handle_action(int product_index, char
                         printf("Type y to confirm, n to cancel, or press \033[1;31mCtrl+X\033[0m to abort: ");
                         printf("\033[1;33m");
                         char confirm[32];
-                        if (!fgets(confirm, sizeof(confirm), stdin)) {
+                        if (!read_line_allow_ctrl(confirm, sizeof(confirm))) {
                             printf("\033[0m\n");
                             local_msg = "\033[1;33mRemoval cancelled.\033[0m";
                             break;
@@ -906,9 +907,10 @@ static ProductActionResult product_manager_handle_action(int product_index, char
 
 void menu_product_manager(){
     const int run_tests_index = 0;
-    const int exit_index = 1;
-    const int add_product_index = 2;
-    const int product_start_index = 3;
+    const int run_e2e_index = 1;
+    const int exit_index = 2;
+    const int add_product_index = 3;
+    const int product_start_index = 4;
 
     int selected = (product_count > 0) ? product_start_index : add_product_index;
     char filter[128];
@@ -929,7 +931,7 @@ void menu_product_manager(){
             return;
         }
 
-        int display_count = mcount + 3; // Run tests, Exit, Add product, and product rows
+        int display_count = mcount + product_start_index; // Static actions + product rows
         if (display_count == 0) {
             display_count = 1;
         }
@@ -946,7 +948,7 @@ void menu_product_manager(){
 
         int terminal_rows = get_terminal_rows();
         int status_lines = (status_msg[0] != '\0') ? 1 : 0;
-        int reserved_lines = 10 + status_lines; // header + filter + instructions + shortcuts + blank + run + exit + add + blank + table header (+status)
+        int reserved_lines = 11 + status_lines; // header + filter + instructions + shortcuts + blank + run unit + run E2E + exit + add + blank + table header (+status)
         int available_rows = terminal_rows - reserved_lines;
         if (available_rows < 1) {
             available_rows = 1;
@@ -1086,10 +1088,11 @@ void menu_product_manager(){
             printf("Filter: \033[1;31m%s\033[0m | Matches: 0\n", filter_display);
         }
         printf("\033[4mUse arrows key to navigate\033[0m | Type to filter, Backspace to erase, Enter selects.\n");
-        printf("Shortcuts: Ctrl+T run tests, Ctrl+N add product, Ctrl+Q exit.\n");
+        printf("Shortcuts: Ctrl+T run unit tests, Ctrl+E run E2E tests, Ctrl+N add product, Ctrl+Q exit.\n");
         printf("\n");
 
         const char *action_run = "[*] Run unit tests";
+        const char *action_run_e2e = "[E] Run end-to-end tests";
         const char *action_exit = "[0] Exit application";
         const char *action_add = "[+] Add new product";
 
@@ -1097,6 +1100,11 @@ void menu_product_manager(){
             printf("\033[1;34m%s\033[0m\n", action_run);
         } else {
             printf("%s\n", action_run);
+        }
+        if (selected == run_e2e_index) {
+            printf("\033[1;34m%s\033[0m\n", action_run_e2e);
+        } else {
+            printf("%s\n", action_run_e2e);
         }
         if (selected == exit_index) {
             printf("\033[1;31m%s\033[0m\n", action_exit);
@@ -1158,6 +1166,9 @@ void menu_product_manager(){
         } else if (key == MENU_KEY_SHORTCUT_RUN_TESTS) {
             selected = run_tests_index;
             key = MENU_KEY_ENTER;
+        } else if (key == MENU_KEY_SHORTCUT_RUN_E2E) {
+            selected = run_e2e_index;
+            key = MENU_KEY_ENTER;
         } else if (key == MENU_KEY_SHORTCUT_EXIT) {
             selected = exit_index;
             key = MENU_KEY_ENTER;
@@ -1203,6 +1214,21 @@ void menu_product_manager(){
                         snprintf(status_msg, sizeof(status_msg), "\033[1;32mUnit tests passed.\033[0m");
                     } else {
                         snprintf(status_msg, sizeof(status_msg), "\033[1;31mUnit tests failed.\033[0m");
+                    }
+                    selected = (product_count > 0) ? product_start_index : add_product_index;
+                    filter[0] = '\0';
+                    product_offset = 0;
+                    continue;
+                } else if (selected == run_e2e_index) {
+                    free(matches);
+                    matches = NULL;
+                    clear_screen();
+                    int e2e_result = run_e2e_tests();
+                    wait_for_enter();
+                    if (e2e_result == 0) {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;32mE2E tests passed.\033[0m");
+                    } else {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;31mE2E tests failed.\033[0m");
                     }
                     selected = (product_count > 0) ? product_start_index : add_product_index;
                     filter[0] = '\0';

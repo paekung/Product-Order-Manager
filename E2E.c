@@ -52,6 +52,7 @@ static int g_script_lines_exhausted = 0;
 static int g_script_step_mode = 0;
 static size_t g_event_step_index = 0;
 static size_t g_line_step_index = 0;
+static size_t g_script_step_counter = 0;
 
 typedef struct {
     size_t event_index;
@@ -97,18 +98,14 @@ static void scripted_step_pause(void) {
     if (!g_script_step_mode) {
         return;
     }
-#ifdef _WIN32
-    Sleep(600);
-#else
-    usleep(600000);
-#endif
+    /* Delay removed to speed up scripted runs */
 }
 
 static void scripted_step_announce(const char *message) {
     if (!g_script_step_mode || !message) {
         return;
     }
-    printf("  \033[1;36m[STEP]\033[0m %s\n", message);
+    printf("  \033[1;36m[STEP %zu] %s\033[0m\n", ++g_script_step_counter, message);
     fflush(stdout);
     scripted_step_pause();
 }
@@ -180,44 +177,6 @@ static void scripted_wait_for_enter(void) {
 
 static void scripted_clear_screen(void) {
     /* Suppress terminal clear in scripted tests */
-}
-
-static int prompt_e2e_display_mode(void) {
-    char buffer[32];
-
-    while (1) {
-        printf("\nChoose E2E display mode:\n");
-        printf("  [1] Step-by-step (with live replay)\n");
-        printf("  [2] Summary results only\n");
-        printf("Select option (default 2): ");
-        fflush(stdout);
-
-        if (!read_line_allow_ctrl(buffer, sizeof(buffer))) {
-            printf("\n\033[1;33mNo input detected, defaulting to summary mode.\033[0m\n");
-            return 2;
-        }
-
-        buffer[strcspn(buffer, "\r\n")] = '\0';
-        trim_whitespace(buffer);
-
-        if (buffer[0] == '\0') {
-            return 2;
-        }
-
-        if (input_is_ctrl_x(buffer)) {
-            printf("\n\033[1;33mCancelled selection, using summary mode.\033[0m\n");
-            return 2;
-        }
-
-        if (buffer[0] == '1' && buffer[1] == '\0') {
-            return 1;
-        }
-        if (buffer[0] == '2' && buffer[1] == '\0') {
-            return 2;
-        }
-
-        printf("\033[1;31mInvalid choice. Please enter 1 or 2.\033[0m\n\n");
-    }
 }
 
 typedef struct {
@@ -442,6 +401,7 @@ static int scenario_full_user_journey(void) {
     g_script_event_count = sizeof(script_events) / sizeof(script_events[0]);
     g_script_event_index = 0;
     g_script_events_exhausted = 0;
+    g_script_step_counter = 0;
 
     g_script_lines = script_lines;
     g_script_line_count = sizeof(script_lines) / sizeof(script_lines[0]);
@@ -536,8 +496,7 @@ typedef struct {
 } E2ETestCase;
 
 int run_e2e_tests(void) {
-    int display_mode = prompt_e2e_display_mode();
-    g_script_step_mode = (display_mode == 1);
+    g_script_step_mode = 1;
 
     ProductStateBackup state_backup;
     FileBackup file_backup;
@@ -568,17 +527,11 @@ int run_e2e_tests(void) {
         return 1;
     }
 
-    if (g_script_step_mode) {
-        printf("\n\033[1mStarting step-by-step replay...\033[0m\n\n");
-    } else {
-        printf("\nRunning end-to-end tests...\n\n");
-    }
+    printf("\n\033[1mStarting step-by-step replay...\033[0m\n\n");
 
     for (size_t i = 0; i < scenario_count; i++) {
         reset_e2e_environment();
-        if (g_script_step_mode) {
-            printf("\033[1;34mScenario:\033[0m %s\n", scenarios[i].name);
-        }
+        printf("\033[1;34mScenario:\033[0m %s\n", scenarios[i].name);
 
         int rc = scenarios[i].func();
         results[i] = rc;
@@ -587,18 +540,10 @@ int run_e2e_tests(void) {
             passed++;
         }
 
-        if (g_script_step_mode) {
-            if (rc == 0) {
-                printf("\033[1;32m✓ Scenario completed successfully.\033[0m\n\n");
-            } else {
-                printf("\033[1;31m✗ Scenario failed.\033[0m\n\n");
-            }
+        if (rc == 0) {
+            printf("\033[1;32m✓ Scenario completed successfully.\033[0m\n\n");
         } else {
-            if (rc == 0) {
-                printf("[PASS] %s\n", scenarios[i].name);
-            } else {
-                printf("[FAIL] %s\n", scenarios[i].name);
-            }
+            printf("\033[1;31m✗ Scenario failed.\033[0m\n\n");
         }
     }
 
