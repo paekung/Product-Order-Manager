@@ -5,6 +5,17 @@ on:
     branches: [ main ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. v1.0.0). Leave empty to use v<run_number>."
+        required: false
+      release_name:
+        description: "Optional release name. Defaults to Release <tag>."
+        required: false
+      prerelease:
+        type: boolean
+        description: "Mark release as pre-release"
+        default: false
 
 jobs:
   build:
@@ -60,3 +71,51 @@ jobs:
           path: |
             ${{ matrix.binary }}
             products.csv
+
+  release:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Prepare release archives
+        run: |
+          set -euo pipefail
+          cd dist
+          for dir in */ ; do
+            dir="${dir%/}"
+            zip -r "${dir}.zip" "$dir"
+          done
+
+      - name: Compute release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag_name }}"
+          if [ -z "$TAG" ]; then
+            TAG="v${{ github.run_number }}"
+          fi
+          NAME="${{ github.event.inputs.release_name }}"
+          if [ -z "$NAME" ]; then
+            NAME="Release $TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          artifacts: dist/*.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          allowUpdates: true
