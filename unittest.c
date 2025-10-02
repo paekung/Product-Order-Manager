@@ -799,14 +799,18 @@ int run_unit_tests(void) {
 
     printf("Running unit tests...\n\n");
 
+    const char *const pass_color = "\x1b[32m";
+    const char *const fail_color = "\x1b[31m";
+    const char *const reset_color = "\x1b[0m";
+
     for (size_t i = 0; i < total_tests; i++) {
         reset_test_environment();
         int rc = tests[i].func();
         if (rc == 0) {
-            printf("[PASS] %s\n", tests[i].name);
+            printf("%s[PASS]%s %s\n", pass_color, reset_color, tests[i].name);
             passed_tests++;
         } else {
-            printf("[FAIL] %s\n", tests[i].name);
+            printf("%s[FAIL]%s %s\n", fail_color, reset_color, tests[i].name);
         }
     }
 
