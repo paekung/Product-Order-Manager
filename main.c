@@ -36,6 +36,7 @@ int update_product(const char *ProductID, const char *ProductName, int Quantity,
 int save_csv(const char *filename);
 void menu_add_product();
 void menu_product_manager();
+int run_unit_tests(void);
 int find_products_by_keyword(const char *keyword, int **out_matches);
 int input_is_ctrl_x(const char *input);
 int input_is_ctrl_z(const char *input);
@@ -396,14 +397,11 @@ static InputResult prompt_product_name(char *ProductName, size_t size, int *hasP
         trim_whitespace(buf);
 
         if (buf[0] == '\0') {
-            if (hasProductName && *hasProductName) {
+            if (hasProductName && *hasProductName && ProductName[0] != '\0') {
                 return INPUT_RESULT_OK;
             }
-            ProductName[0] = '\0';
-            if (hasProductName) {
-                *hasProductName = 1;
-            }
-            return INPUT_RESULT_OK;
+            printf("\033[1;31mProduct name cannot be empty.\033[0m\n");
+            continue;
         }
 
         strncpy(ProductName, buf, size - 1);
@@ -561,6 +559,20 @@ int load_csv(const char *filename){
 
 // add product
 int add_product(const char *ProductID, const char *ProductName, int Quantity, int UnitPrice){
+    if (!ProductName) {
+        return 1;
+    }
+
+    int has_non_whitespace = 0;
+    for (const char *p = ProductName; *p; ++p) {
+        if (!isspace((unsigned char)*p)) {
+            has_non_whitespace = 1;
+            break;
+        }
+    }
+    if (!has_non_whitespace) {
+        return 1;
+    }
 
     // Check for duplicate ProductID
     for(int i=0; i<product_count; i++){
@@ -677,6 +689,16 @@ int update_product(const char *ProductID, const char *ProductName, int Quantity,
     for(int i=0; i<product_count; i++){
         if(strcmp(products[i].ProductID, ProductID) == 0){
             if(ProductName != NULL){
+                int has_non_whitespace = 0;
+                for (const char *p = ProductName; *p; ++p) {
+                    if (!isspace((unsigned char)*p)) {
+                        has_non_whitespace = 1;
+                        break;
+                    }
+                }
+                if (!has_non_whitespace) {
+                    return 1;
+                }
                 strcpy(products[i].ProductName, ProductName);
             }
             if(Quantity >= 0){
@@ -809,7 +831,7 @@ void menu_add_product(){
     if(add_product(ProductID, ProductName, Quantity, UnitPrice) == 0){
         printf("\n\033[1;32mProduct added successfully!\033[0m\n");
     } else {
-        printf("\033[1;31mFailed to add product. Duplicate Product ID\033[0m\n");
+        printf("\033[1;31mFailed to add product. Ensure the Product ID is unique and the name is not empty.\033[0m\n");
     }
 }
 
@@ -1110,13 +1132,16 @@ void menu_product_manager(){
             return;
         }
 
-        int display_count = mcount + 2; // extra rows for Add new product and Exit
+        int display_count = mcount + 3; // extra rows for Add product, Run unit tests, and Exit
         if (display_count == 0) {
             display_count = 1;
         }
         if (selected >= display_count) {
             selected = display_count - 1;
         }
+
+        int run_tests_index = display_count - 2;
+        int exit_index = display_count - 1;
 
         clear_screen();
         printf("\033[1m── Product Order Manager ───────────────────────────────────────────\n\n\033[0m");
@@ -1156,8 +1181,14 @@ void menu_product_manager(){
             }
         }
 
+        if (selected == run_tests_index) {
+            printf("\n\033[1;34m> [*] Run unit tests\033[0m\n");
+        } else {
+            printf("\n  [*] Run unit tests\n");
+        }
+
         printf("\n");
-        if (selected == display_count - 1) {
+        if (selected == exit_index) {
             printf("\033[1;31m> [0] Exit application\033[0m\n");
         } else {
             printf("  [0] Exit application\n");
@@ -1201,7 +1232,21 @@ void menu_product_manager(){
                         snprintf(status_msg, sizeof(status_msg), "\033[1;33mNo product added.\033[0m");
                     }
                     continue;
-                } else if (selected == display_count - 1) {
+                } else if (selected == run_tests_index) {
+                    free(matches);
+                    matches = NULL;
+                    clear_screen();
+                    int tests_result = run_unit_tests();
+                    wait_for_enter();
+                    if (tests_result == 0) {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;32mUnit tests passed.\033[0m");
+                    } else {
+                        snprintf(status_msg, sizeof(status_msg), "\033[1;31mUnit tests failed.\033[0m");
+                    }
+                    selected = (product_count > 0) ? 1 : 0;
+                    filter[0] = '\0';
+                    continue;
+                } else if (selected == exit_index) {
                     free(matches);
                     matches = NULL;
                     running = 0;

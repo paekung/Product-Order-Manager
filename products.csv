@@ -1,10 +1,51 @@
 ProductID,ProductName,Quantity,UnitPrice
-P002,Smartphone,15,15000
-P003,Tablet,20,12000
-P004,Smartwatch,25,8000
-P005,Desktop PC,8,30000
-P006,Wireless Earbuds,30,2500
-P007,Bluetooth Speaker,18,3500
-P008,External Hard Drive,12,4500
-P009,Monitor 24",14,5500
-P010,Printer,10,6000
+P011,Laptop 14",12,22000
+P012,Laptop 15.6",10,28000
+P013,Gaming Laptop,6,45000
+P014,Mechanical Keyboard,25,3200
+P015,Wireless Mouse,40,1200
+P016,Webcam HD,18,2500
+P017,Graphics Card GTX 1660,8,12000
+P018,Graphics Card RTX 3060,5,18000
+P019,Graphics Card RTX 4070,3,28000
+P020,Router Wi-Fi 6,14,3500
+P021,Power Bank 10000mAh,30,1500
+P022,Power Bank 20000mAh,20,2500
+P023,Portable SSD 500GB,15,3500
+P024,Portable SSD 1TB,12,5500
+P025,USB Flash Drive 32GB,40,300
+P026,USB Flash Drive 64GB,35,500
+P027,USB Flash Drive 128GB,25,900
+P028,Memory Card 64GB,30,600
+P029,Memory Card 128GB,20,1100
+P030,Smart TV 32",8,7500
+P031,Smart TV 43",6,12500
+P032,Smart TV 55",5,18500
+P033,Smart TV 65",4,28000
+P034,Projector Mini,10,7500
+P035,Projector Full HD,6,14500
+P036,Projector 4K,3,28500
+P037,Game Console,7,12500
+P038,VR Headset,5,18500
+P039,Drone Camera,4,22500
+P040,Digital Camera,6,19500
+P041,Action Camera,8,9500
+P042,Tripod Stand,20,1200
+P043,Smart Home Hub,10,5500
+P044,Smart Light Bulb,40,600
+P045,Smart Door Lock,6,9500
+P046,Robot Vacuum,7,12500
+P047,Air Purifier,10,8500
+P048,Electric Kettle,20,1500
+P049,Microwave Oven,8,4500
+P050,Rice Cooker,12,2800
+P051,Refrigerator 6.5Q,5,12500
+P052,Refrigerator 8Q,4,16500
+P053,Refrigerator 12Q,3,22500
+P054,Washing Machine 8kg,5,11500
+P055,Washing Machine 12kg,4,15800
+P056,Air Conditioner 12000BTU,6,18500
+P057,Air Conditioner 18000BTU,5,26500
+P058,Ceiling Fan,15,2500
+P059,Portable Fan,20,1200
+P060,Water Heater,10,4500
