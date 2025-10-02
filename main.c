@@ -7,6 +7,7 @@
 #ifndef _WIN32
 #include <unistd.h>
 #include <termios.h>
+#include <sys/ioctl.h>
 #endif
 
 // For Windows console UTF-8 support
@@ -53,6 +54,7 @@ typedef enum {
     MENU_KEY_CHAR
 } MenuKey;
 static MenuKey read_menu_key(int *out_digit, char *out_char);
+static int get_terminal_rows(void);
 /////////////////////////
 
 // Utility functions
@@ -231,6 +233,35 @@ restore_termios:
     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     return result;
 #endif
+}
+////////////////////////
+
+static int get_terminal_rows(void) {
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle != INVALID_HANDLE_VALUE && GetConsoleScreenBufferInfo(handle, &info)) {
+        int rows = (int)(info.srWindow.Bottom - info.srWindow.Top + 1);
+        if (rows > 0) {
+            return rows;
+        }
+    }
+#else
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
+        return (int)ws.ws_row;
+    }
+
+    const char *env_rows = getenv("LINES");
+    if (env_rows) {
+        char *endptr = NULL;
+        long parsed = strtol(env_rows, &endptr, 10);
+        if (endptr != env_rows && parsed > 0 && parsed <= INT_MAX) {
+            return (int)parsed;
+        }
+    }
+#endif
+    return 24; // sensible default when terminal size is unknown
 }
 ////////////////////////
 
@@ -1114,12 +1145,18 @@ static ProductActionResult product_manager_handle_action(int product_index, char
 }
 
 void menu_product_manager(){
-    int selected = (product_count > 0) ? 1 : 0;
+    const int run_tests_index = 0;
+    const int exit_index = 1;
+    const int add_product_index = 2;
+    const int product_start_index = 3;
+
+    int selected = (product_count > 0) ? product_start_index : add_product_index;
     char filter[128];
     filter[0] = '\0';
     char status_msg[256];
     status_msg[0] = '\0';
     int running = 1;
+    int product_offset = 0;
 
     while (running) {
         int *matches = NULL;
@@ -1132,70 +1169,201 @@ void menu_product_manager(){
             return;
         }
 
-        int display_count = mcount + 3; // extra rows for Add product, Run unit tests, and Exit
+        int display_count = mcount + 3; // Run tests, Exit, Add product, and product rows
         if (display_count == 0) {
             display_count = 1;
         }
         if (selected >= display_count) {
             selected = display_count - 1;
         }
-
-        int run_tests_index = display_count - 2;
-        int exit_index = display_count - 1;
-
-        clear_screen();
-        printf("\033[1m── Product Order Manager ───────────────────────────────────────────\n\n\033[0m");
-        printf("Filter: %s\n", filter[0] ? filter : "<none>");
-        printf("Use arrows to navigate. Type to filter, Backspace to erase. Enter selects. Choose [0] to exit.\n");
-        printf("Select [+] Add new product to create items quickly.\n\n");
-
-        if (selected == 0) {
-            printf("\033[1;32m> [+] Add new product\033[0m\n");
-        } else {
-            printf("  [+] Add new product\n");
+        if (selected < 0) {
+            selected = 0;
         }
 
-        printf("\n\033[1;33m#  %-10s %-20s %-10s %-10s\033[0m\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
-
         if (mcount == 0) {
-            printf("No products match the filter.\n");
-        } else {
-            for (int i = 0; i < mcount; i++) {
-                int idx = matches[i];
-                int display_index = i + 1;
-                if (display_index == selected) {
-                    printf("\033[1;32m> %-2d%-10s %-20s %-10d %-10d\033[0m\n",
-                           i + 1,
-                           products[idx].ProductID,
-                           products[idx].ProductName,
-                           products[idx].Quantity,
-                           products[idx].UnitPrice);
+            product_offset = 0;
+        }
+
+        int terminal_rows = get_terminal_rows();
+        int status_lines = (status_msg[0] != '\0') ? 1 : 0;
+        int reserved_lines = 9 + status_lines; // header + filter info + instructions + blank + run tests + exit + spacer + add + table header (+status)
+        int available_rows = terminal_rows - reserved_lines;
+        if (available_rows < 1) {
+            available_rows = 1;
+        }
+
+        int product_rows_capacity = available_rows - 1; // keep headroom so title stays visible on cramped terminals
+        if (product_rows_capacity < 1) {
+            product_rows_capacity = 1;
+        }
+
+        int items_per_page = (mcount > 0) ? product_rows_capacity : 1;
+        if (mcount > 0 && items_per_page > mcount) {
+            items_per_page = mcount;
+        }
+        if (mcount > 0 && product_offset >= mcount) {
+            product_offset = mcount - items_per_page;
+            if (product_offset < 0) {
+                product_offset = 0;
+            }
+        }
+
+        if (mcount > 0 && selected >= product_start_index && selected < product_start_index + mcount) {
+            int relative_index = selected - product_start_index;
+            if (relative_index < product_offset) {
+                product_offset = relative_index;
+            } else if (relative_index >= product_offset + items_per_page) {
+                product_offset = relative_index - items_per_page + 1;
+            }
+        }
+
+        int visible_count = 0;
+        int has_more_above = 0;
+        int has_more_below = 0;
+        if (mcount > 0) {
+            int max_visible = items_per_page;
+            if (max_visible < 1) {
+                max_visible = 1;
+            }
+
+            if (product_offset < 0) {
+                product_offset = 0;
+            }
+
+            if (product_offset > mcount - 1) {
+                product_offset = mcount - 1;
+            }
+
+            visible_count = mcount - product_offset;
+            if (visible_count > max_visible) {
+                visible_count = max_visible;
+            }
+
+            has_more_above = (product_offset > 0);
+            has_more_below = (product_offset + visible_count < mcount);
+
+            int total_lines = visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0);
+            while (total_lines > max_visible && visible_count > 0) {
+                if (has_more_below) {
+                    visible_count--;
+                    has_more_below = (product_offset + visible_count < mcount);
+                } else if (has_more_above) {
+                    visible_count--;
+                    if (visible_count == 0 && mcount > 0) {
+                        visible_count = 1;
+                        has_more_above = 0;
+                    }
                 } else {
-                    printf("  %-2d%-10s %-20s %-10d %-10d\n",
-                           i + 1,
-                           products[idx].ProductID,
-                           products[idx].ProductName,
-                           products[idx].Quantity,
-                           products[idx].UnitPrice);
+                    break;
+                }
+                total_lines = visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0);
+            }
+
+            if (visible_count < 1) {
+                visible_count = 1;
+                has_more_above = (product_offset > 0);
+                has_more_below = (product_offset + visible_count < mcount);
+            }
+
+            if (visible_count + (has_more_above ? 1 : 0) + (has_more_below ? 1 : 0) > max_visible) {
+                if (has_more_below) {
+                    has_more_below = 0;
+                } else if (has_more_above) {
+                    has_more_above = 0;
                 }
             }
         }
 
-        if (selected == run_tests_index) {
-            printf("\n\033[1;34m> [*] Run unit tests\033[0m\n");
-        } else {
-            printf("\n  [*] Run unit tests\n");
+        int total_pages = 1;
+        int current_page = 1;
+        int start_display = 0;
+        int end_display = 0;
+        if (mcount > 0 && items_per_page > 0) {
+            total_pages = (mcount + items_per_page - 1) / items_per_page;
+            if (total_pages < 1) {
+                total_pages = 1;
+            }
+            current_page = (product_offset / items_per_page) + 1;
+            if (current_page > total_pages) {
+                current_page = total_pages;
+            }
+            start_display = product_offset + 1;
+            end_display = product_offset + visible_count;
         }
 
+        clear_screen();
+        printf("\033[1m── Product Order Manager ───────────────────────────────────────────\033[0m\n");
+        const char *filter_display = filter[0] ? filter : "<none>";
+        if (mcount > 0) {
+            printf("Filter: %s | Matches: %d | Page %d/%d (%d-%d of %d)\n",
+                   filter_display,
+                   mcount,
+                   current_page,
+                   total_pages,
+                   start_display,
+                   end_display,
+                   mcount);
+        } else {
+            printf("Filter: %s | Matches: 0\n", filter_display);
+        }
+        printf("Use arrows to navigate. Type to filter, Backspace to erase, Enter selects. List scrolls to fit your terminal.\n");
         printf("\n");
+
+        if (selected == run_tests_index) {
+            printf("\033[1;34m> [*] Run unit tests\033[0m\n");
+        } else {
+            printf("  [*] Run unit tests\n");
+        }
+
         if (selected == exit_index) {
             printf("\033[1;31m> [0] Exit application\033[0m\n");
         } else {
             printf("  [0] Exit application\n");
         }
 
+        printf("\n");
+
+        if (selected == add_product_index) {
+            printf("\033[1;32m> [+] Add new product\033[0m\n");
+        } else {
+            printf("  [+] Add new product\n");
+        }
+
+        printf("  #  %-10s %-20s %10s %10s\n", "ProductID", "ProductName", "Quantity", "UnitPrice");
+
+        if (mcount == 0) {
+            printf("  (no products to display)\n");
+        } else {
+            if (has_more_above) {
+                printf("  ↑  more products above\n");
+            }
+            for (int i = 0; i < visible_count; i++) {
+                int match_index = product_offset + i;
+                int idx = matches[match_index];
+                int display_index = match_index + 1;
+                if (selected == product_start_index + match_index) {
+                    printf("\033[1;32m> %2d %-10.10s %-20.20s %10d %10d\033[0m\n",
+                           display_index,
+                           products[idx].ProductID,
+                           products[idx].ProductName,
+                           products[idx].Quantity,
+                           products[idx].UnitPrice);
+                } else {
+                    printf("  %2d %-10.10s %-20.20s %10d %10d\n",
+                           display_index,
+                           products[idx].ProductID,
+                           products[idx].ProductName,
+                           products[idx].Quantity,
+                           products[idx].UnitPrice);
+                }
+            }
+            if (has_more_below) {
+                printf("  ↓  more products below\n");
+            }
+        }
+
         if (status_msg[0] != '\0') {
-            printf("\n%s\n", status_msg);
+            printf("%s\n", status_msg);
             status_msg[0] = '\0';
         }
 
@@ -1218,7 +1386,7 @@ void menu_product_manager(){
                 }
                 break;
             case MENU_KEY_ENTER:
-                if (selected == 0) {
+                if (selected == add_product_index) {
                     int before_count = product_count;
                     free(matches);
                     matches = NULL;
@@ -1226,11 +1394,12 @@ void menu_product_manager(){
                     wait_for_enter();
                     if (product_count > before_count) {
                         snprintf(status_msg, sizeof(status_msg), "\033[1;32mProduct added.\033[0m");
-                        selected = (product_count > 0) ? 1 : 0;
+                        selected = (product_count > 0) ? product_start_index : add_product_index;
                         filter[0] = '\0';
                     } else {
                         snprintf(status_msg, sizeof(status_msg), "\033[1;33mNo product added.\033[0m");
                     }
+                    product_offset = 0;
                     continue;
                 } else if (selected == run_tests_index) {
                     free(matches);
@@ -1243,8 +1412,9 @@ void menu_product_manager(){
                     } else {
                         snprintf(status_msg, sizeof(status_msg), "\033[1;31mUnit tests failed.\033[0m");
                     }
-                    selected = (product_count > 0) ? 1 : 0;
+                    selected = (product_count > 0) ? product_start_index : add_product_index;
                     filter[0] = '\0';
+                    product_offset = 0;
                     continue;
                 } else if (selected == exit_index) {
                     free(matches);
@@ -1252,28 +1422,31 @@ void menu_product_manager(){
                     running = 0;
                     continue;
                 }
-                if (mcount > 0 && selected - 1 >= 0 && selected - 1 < mcount) {
-                    chosen_index = matches[selected - 1];
+                if (mcount > 0 && selected >= product_start_index && selected < product_start_index + mcount) {
+                    chosen_index = matches[selected - product_start_index];
                 }
                 break;
             case MENU_KEY_DIGIT:
                 if (filter_len < sizeof(filter) - 1) {
                     filter[filter_len] = (char)('0' + digit);
                     filter[filter_len + 1] = '\0';
-                    selected = (mcount > 0) ? 1 : (display_count - 1);
+                    selected = (mcount > 0) ? product_start_index : add_product_index;
+                    product_offset = 0;
                 }
                 break;
             case MENU_KEY_CHAR:
                 if (filter_len < sizeof(filter) - 1 && typed != '\0') {
                     filter[filter_len] = typed;
                     filter[filter_len + 1] = '\0';
-                    selected = (mcount > 0) ? 1 : (display_count - 1);
+                    selected = (mcount > 0) ? product_start_index : add_product_index;
+                    product_offset = 0;
                 }
                 break;
             case MENU_KEY_BACKSPACE:
                 if (filter_len > 0) {
                     filter[filter_len - 1] = '\0';
-                    selected = (mcount > 0) ? 1 : (display_count - 1);
+                    selected = (mcount > 0) ? product_start_index : add_product_index;
+                    product_offset = 0;
                 }
                 break;
             default:
@@ -1283,7 +1456,8 @@ void menu_product_manager(){
         if (chosen_index >= 0) {
             ProductActionResult action = product_manager_handle_action(chosen_index, status_msg, sizeof(status_msg));
             if (action == PRODUCT_ACTION_REMOVED) {
-                selected = 0;
+                selected = (product_count > 0) ? product_start_index : add_product_index;
+                product_offset = 0;
             }
         }
 
