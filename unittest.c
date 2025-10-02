@@ -803,7 +803,7 @@ int run_unit_tests(void) {
         reset_test_environment();
         int rc = tests[i].func();
         if (rc == 0) {
-            printf("\033[32m[PASS]\033[0m %s\n", tests[i].name);
+            printf("\033[1;32m[PASS]\033[0m %s\n", tests[i].name);
             passed_tests++;
         } else {
             printf("\033[31m[FAIL]\033[0m %s\n", tests[i].name);

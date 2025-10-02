@@ -1091,10 +1091,10 @@ void menu_product_manager(){
         printf("Shortcuts: Ctrl+T run unit tests, Ctrl+E run E2E tests, Ctrl+N add product, Ctrl+Q exit.\n");
         printf("\n");
 
-        const char *action_run = "[*] Run unit tests";
+        const char *action_run = "[Ctrl+T] Run unit tests";
         const char *action_run_e2e = "[E] Run end-to-end tests";
-        const char *action_exit = "[0] Exit application";
-        const char *action_add = "[+] Add new product";
+        const char *action_exit = "[Ctrl+Q] Exit application";
+        const char *action_add = "[Ctrl+N] Add new product";
 
         if (selected == run_tests_index) {
             printf("\033[1;34m%s\033[0m\n", action_run);
