@@ -973,9 +973,16 @@ void menu_update_product(){
 
     char keyword[128];
     printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    if (!fgets(keyword, sizeof(keyword), stdin)) return;
+    printf("\033[1;33m");
+    if (!fgets(keyword, sizeof(keyword), stdin)){
+        printf("\033[0m");
+        return;
+    }
     keyword[strcspn(keyword, "\r\n")] = '\0';
-    if (input_is_ctrl_x(keyword)) return;
+    printf("\033[0m");
+    if (input_is_ctrl_x(keyword)){
+        return;
+    }
 
     int *matches = NULL;
     int mcount = find_products_by_keyword(keyword, &matches);
@@ -1007,9 +1014,18 @@ void menu_update_product(){
     char choice[32];
     int pick = -1;
     printf("\nSelect ONE item number to update or press \033[1;31mCtrl+X\033[0m to cancel: ");
-    if (!fgets(choice, sizeof(choice), stdin)){ free(matches); return; }
+    printf("\033[1;33m");
+    if (!fgets(choice, sizeof(choice), stdin)){
+        printf("\033[0m");
+        free(matches);
+        return;
+    }
     choice[strcspn(choice, "\r\n")] = '\0';
-    if (input_is_ctrl_x(choice)){ free(matches); printf("\n\033[1;33mOperation cancelled.\033[0m\n"); return; }
+    printf("\033[0m");
+    if (input_is_ctrl_x(choice)){
+        free(matches);
+        return;
+    }
 
     pick = atoi(choice);
     if (pick < 1 || pick > mcount){
@@ -1019,64 +1035,89 @@ void menu_update_product(){
     }
 
     int idx = matches[pick - 1];
+    Product *prod = &products[idx];
     free(matches);
 
-    printf("\nEditing: \033[1m%s\033[0m | %s (Qty %d, Price %d)\n",
-           products[idx].ProductID,
-           products[idx].ProductName,
-           products[idx].Quantity,
-           products[idx].UnitPrice);
+    char ProductName[100];
+    strncpy(ProductName, prod->ProductName, sizeof(ProductName) - 1);
+    ProductName[sizeof(ProductName) - 1] = '\0';
+    int Quantity = prod->Quantity;
+    int UnitPrice = prod->UnitPrice;
+    int hasProductName = 1;
+    int hasQuantity = 1;
+    int hasUnitPrice = 1;
+    int stage = 0;
+    const char *status_msg = NULL;
 
-    char buf[256];
+    while (stage >= 0 && stage < 3) {
+        clear_screen();
+        printf("\033[1m── Product Order Manager | Update Product ────────────────────\033[0m\n\n");
+        printf("Editing Product ID: %s\n", prod->ProductID);
+        printf("Product Name: %s\n", hasProductName ? ProductName : "");
+        if (hasQuantity) {
+            printf("Quantity: %d\n", Quantity);
+        } else {
+            printf("Quantity: \n");
+        }
+        if (hasUnitPrice) {
+            printf("Unit Price: %d\n", UnitPrice);
+        } else {
+            printf("Unit Price: \n");
+        }
+        printf("\n");
+        if (status_msg) {
+            printf("%s\n\n", status_msg);
+        }
+        status_msg = NULL;
 
-    char *newNamePtr = NULL;
-    char newName[100];
-    printf("New Product Name (leave blank to keep): ");
-    if (!fgets(buf, sizeof(buf), stdin)) return;
-    buf[strcspn(buf, "\r\n")] = '\0';
-    if (buf[0] != '\0'){
-        strncpy(newName, buf, sizeof(newName)-1);
-        newName[sizeof(newName)-1] = '\0';
-        newNamePtr = newName;
+        InputResult result;
+        switch (stage) {
+            case 0:
+                result = prompt_product_name(ProductName, sizeof(ProductName), &hasProductName);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    status_msg = "\033[1;33mAlready at the first input.\033[0m";
+                    continue;
+                }
+                stage = 1;
+                break;
+
+            case 1:
+                result = prompt_integer_input("Enter Quantity", "Quantity", &Quantity, &hasQuantity);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    stage = 0;
+                    continue;
+                }
+                stage = 2;
+                break;
+
+            case 2:
+                result = prompt_integer_input("Enter Unit Price", "Unit Price", &UnitPrice, &hasUnitPrice);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    stage = 1;
+                    continue;
+                }
+                stage = 3;
+                break;
+
+            default:
+                return;
+        }
     }
 
-    int newQty = -1;
-    while (1){
-        printf("New Quantity (leave blank to keep): ");
-        if (!fgets(buf, sizeof(buf), stdin)) return;
-        buf[strcspn(buf, "\r\n")] = '\0';
-        if (buf[0] == '\0'){ // keep
-            newQty = -1;
-            break;
-        }
-        char *endp = NULL;
-        long v = strtol(buf, &endp, 10);
-        if (endp != buf && *endp == '\0' && v >= 0 && v <= INT_MAX){
-            newQty = (int)v;
-            break;
-        }
-        printf("\033[1;31mPlease enter a non-negative integer.\033[0m\n");
+    if (stage != 3) {
+        return;
     }
 
-    int newPrice = -1;
-    while (1){
-        printf("New Unit Price (leave blank to keep): ");
-        if (!fgets(buf, sizeof(buf), stdin)) return;
-        buf[strcspn(buf, "\r\n")] = '\0';
-        if (buf[0] == '\0'){ // keep
-            newPrice = -1;
-            break;
-        }
-        char *endp = NULL;
-        long v = strtol(buf, &endp, 10);
-        if (endp != buf && *endp == '\0' && v >= 0 && v <= INT_MAX){
-            newPrice = (int)v;
-            break;
-        }
-        printf("\033[1;31mPlease enter a non-negative integer.\033[0m\n");
-    }
-
-    if (update_product(products[idx].ProductID, newNamePtr, newQty, newPrice) == 0){
+    if (update_product(prod->ProductID, ProductName, Quantity, UnitPrice) == 0){
         if (save_csv("products.csv") == 0){
             printf("\n\033[1;32mProduct updated successfully!\033[0m\n");
         } else {
