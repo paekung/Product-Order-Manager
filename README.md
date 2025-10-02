@@ -1,5 +1,7 @@
 # Product Order Manager
 
+![Product Order Manager interface](https://pixvid.org/images/2025/10/02/UNvkI.png)
+
 ## Overview
 Product Order Manager is a terminal-based inventory tool for tracking products, quantities, and pricing. Data is persisted to a CSV file so the catalog survives between runs. The interface is keyboard-driven, supports incremental search, and includes shortcuts to run automated tests that validate critical behaviours.
 
