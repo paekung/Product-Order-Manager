@@ -8,25 +8,55 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            artifact-name: ProductOrderManager-linux
+            binary: ProductOrderManager
+          - os: macos-latest
+            artifact-name: ProductOrderManager-macos
+            binary: ProductOrderManager
+          - os: windows-latest
+            artifact-name: ProductOrderManager-windows
+            binary: ProductOrderManager.exe
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show GCC version
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+
+      - name: Show compiler version
+        if: runner.os != 'Windows'
+        run: gcc --version
+
+      - name: Show compiler version (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: gcc --version
 
       - name: Build ProductOrderManager
-        run: gcc -std=c99 -Wall -Wextra -Werror main.c UnitTests.c E2E.c helpers.c -o ProductOrderManager
+        if: runner.os != 'Windows'
+        run: gcc -std=c99 -Wall -Wextra -Werror main.c UnitTests.c E2E.c helpers.c -o ${{ matrix.binary }}
+
+      - name: Build ProductOrderManager (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: gcc -std=c99 -Wall -Wextra -Werror main.c UnitTests.c E2E.c helpers.c -o ${{ matrix.binary }}
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ProductOrderManager-${{ matrix.os }}
+          name: ${{ matrix.artifact-name }}
           path: |
-            ProductOrderManager
+            ${{ matrix.binary }}
             products.csv
