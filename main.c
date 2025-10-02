@@ -12,6 +12,7 @@
 // For Windows console UTF-8 support
 #ifdef _WIN32
 #include <windows.h>
+#include <conio.h>
 #endif
 
 // Define Product structure
@@ -44,6 +45,15 @@ int input_is_ctrl_x(const char *input);
 int input_is_ctrl_z(const char *input);
 void trim_whitespace(char *str);
 int read_line_allow_ctrl(char *buffer, size_t size);
+typedef enum {
+    MENU_KEY_NONE = 0,
+    MENU_KEY_UP,
+    MENU_KEY_DOWN,
+    MENU_KEY_ENTER,
+    MENU_KEY_DIGIT,
+    MENU_KEY_ESCAPE
+} MenuKey;
+static MenuKey read_menu_key(int *out_digit);
 /////////////////////////
 
 // Utility functions
@@ -104,6 +114,99 @@ int read_line_allow_ctrl(char *buffer, size_t size) {
 #endif
 
     return res != NULL;
+}
+////////////////////////
+
+static MenuKey read_menu_key(int *out_digit) {
+    if (out_digit) {
+        *out_digit = -1;
+    }
+
+#ifdef _WIN32
+    int ch = _getch();
+    if (ch == 0 || ch == 0xE0) {
+        int ch2 = _getch();
+        if (ch2 == 72) {
+            return MENU_KEY_UP;
+        }
+        if (ch2 == 80) {
+            return MENU_KEY_DOWN;
+        }
+        return MENU_KEY_NONE;
+    }
+    if (ch == '\r') {
+        return MENU_KEY_ENTER;
+    }
+    if (ch >= '0' && ch <= '9') {
+        if (out_digit) {
+            *out_digit = ch - '0';
+        }
+        return MENU_KEY_DIGIT;
+    }
+    if (ch == 27) {
+        return MENU_KEY_ESCAPE;
+    }
+    return MENU_KEY_NONE;
+#else
+    struct termios oldt;
+    if (tcgetattr(STDIN_FILENO, &oldt) != 0) {
+        return MENU_KEY_NONE;
+    }
+
+    struct termios newt = oldt;
+    newt.c_lflag &= (tcflag_t)(~(ICANON | ECHO));
+    newt.c_cc[VMIN] = 1;
+    newt.c_cc[VTIME] = 0;
+
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &newt) != 0) {
+        return MENU_KEY_NONE;
+    }
+
+    MenuKey result = MENU_KEY_NONE;
+    int ch = getchar();
+    if (ch == EOF) {
+        result = MENU_KEY_NONE;
+        goto restore_termios;
+    }
+
+    if (ch == '\n' || ch == '\r') {
+        result = MENU_KEY_ENTER;
+        goto restore_termios;
+    }
+
+    if (ch >= '0' && ch <= '9') {
+        if (out_digit) {
+            *out_digit = ch - '0';
+        }
+        result = MENU_KEY_DIGIT;
+        goto restore_termios;
+    }
+
+    if (ch == 27) {
+        int ch1 = getchar();
+        if (ch1 == '[') {
+            int ch2 = getchar();
+            if (ch2 == 'A') {
+                result = MENU_KEY_UP;
+            } else if (ch2 == 'B') {
+                result = MENU_KEY_DOWN;
+            }
+        } else if (ch1 == EOF) {
+            result = MENU_KEY_ESCAPE;
+        } else {
+            result = MENU_KEY_ESCAPE;
+        }
+        goto restore_termios;
+    }
+
+    if (ch == 3) {
+        result = MENU_KEY_ESCAPE;
+    }
+
+restore_termios:
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return result;
+#endif
 }
 ////////////////////////
 
@@ -420,68 +523,116 @@ int load_csv(const char *filename){
 }
 
 void menu() {
-    int choice;
+    const int menu_values[] = {1, 2, 3, 4, 5, 0};
+    const char *menu_numbers[] = {"[1]", "[2]", "[3]", "[4]", "[5]", "[0]"};
+    const char *menu_labels[] = {
+        "List all products",
+        "Search products",
+        "Add a new product",
+        "Remove a product",
+        "Update a product",
+        "Exit"
+    };
+    const int menu_count = (int)(sizeof(menu_values) / sizeof(menu_values[0]));
 
-    do {
-        clear_screen();
-        printf("\033[0m");
-        printf("\033[1m");
-        printf("── Product Order Manager | Menu ───\n\n");
-        printf("\033[0m");
-        printf("\033[1;33mChoose an option:\033[0m\n");
-        printf("\033[1;32m [1] \033[0mList all products\n");
-        printf("\033[1;32m [2] \033[0mSearch products\n");
-        printf("\033[1;32m [3] \033[0mAdd a new product\n");
-        printf("\033[1;32m [4] \033[0mRemove a product\n");
-        printf("\033[1;32m [5] \033[0mUpdate a product\n");
-        printf("\033[1;32m [0] \033[0mExit\n\n");
+    int selected = 0;
+    int running = 1;
+    const char *status_msg = NULL;
 
-        printf("Enter your choice: ");
-        
-        if (scanf("%d", &choice) != 1) {
-            while (getchar() != '\n');
-            choice = -1;
-        } else {
-            int ch;
-            while ((ch = getchar()) != '\n' && ch != EOF) {}
+    while (running) {
+        int choice = -1;
+        while (choice == -1 && running) {
+            clear_screen();
+            printf("\033[0m");
+            printf("\033[1m");
+            printf("── Product Order Manager | Menu ───\n\n");
+            printf("\033[0m");
+            printf("\033[1;33mChoose an option:\033[0m\n");
+
+            for (int i = 0; i < menu_count; i++) {
+                if (i == selected) {
+                    printf("\033[1;32m> %s %s\033[0m\n", menu_numbers[i], menu_labels[i]);
+                } else {
+                    printf("  \033[1;32m%s\033[0m %s\n", menu_numbers[i], menu_labels[i]);
+                }
+            }
+
+            printf("\nUse Up ↑/Down ↓ arrows or number keys, then press Enter.\n");
+            if (status_msg) {
+                printf("%s\n", status_msg);
+                status_msg = NULL;
+            }
+
+            int digit = -1;
+            MenuKey key = read_menu_key(&digit);
+
+            switch (key) {
+                case MENU_KEY_UP:
+                    selected = (selected - 1 + menu_count) % menu_count;
+                    break;
+                case MENU_KEY_DOWN:
+                    selected = (selected + 1) % menu_count;
+                    break;
+                case MENU_KEY_ENTER:
+                    choice = menu_values[selected];
+                    break;
+                case MENU_KEY_DIGIT: {
+                    int found = 0;
+                    for (int i = 0; i < menu_count; i++) {
+                        if (menu_values[i] == digit) {
+                            selected = i;
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        status_msg = "\033[1;31mInvalid menu number.\033[0m";
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        if (!running) {
+            break;
         }
 
         switch (choice) {
-            case 1: // List products
+            case 1:
                 clear_screen();
-                printf("\033[1m"); 
+                printf("\033[1m");
                 printf("── Product Order Manager | Listing ───────────────────────────\n");
                 printf("\033[0m");
                 menu_list_products();
                 wait_for_enter();
                 break;
-
-            case 2: // Search products
+            case 2:
                 menu_search_product();
                 wait_for_enter();
                 break;
-
-            case 3: // Add product
+            case 3:
                 menu_add_product();
                 wait_for_enter();
                 break;
-
-            case 4: // Remove product
+            case 4:
                 menu_remove_product();
                 wait_for_enter();
                 break;
-            case 5: // Update product
+            case 5:
                 menu_update_product();
                 wait_for_enter();
                 break;
-            case 0: // Exit
+            case 0:
                 printf("Exiting the program...\n");
+                running = 0;
                 break;
             default:
-                printf("Invalid choice! Please try again.\n");
+                status_msg = "\033[1;31mInvalid choice!\033[0m";
                 break;
         }
-    } while (choice != 0); // Loop until user chooses to exit
+    }
 }
 
 // add product
