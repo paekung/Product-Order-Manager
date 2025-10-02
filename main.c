@@ -35,6 +35,7 @@ void menu_search_product();
 void menu_remove_product();
 void menu_update_product();
 int find_products_by_keyword(const char *keyword, int **out_matches);
+int input_is_ctrl_x(const char *input);
 /////////////////////////
 
 // Utility functions
@@ -46,6 +47,33 @@ void wait_for_enter() {
     printf("\033[1;32mPress Enter to back to menu...\033[0m");
     fflush(stdout);
     getchar();
+}
+////////////////////////
+
+// Detect if the user pressed Ctrl+X (ASCII 24) or typed ^X manually
+int input_is_ctrl_x(const char *input) {
+    if (!input) {
+        return 0;
+    }
+
+    while (isspace((unsigned char)*input)) {
+        input++;
+    }
+
+    const char *end = input + strlen(input);
+    while (end > input && isspace((unsigned char)end[-1])) {
+        end--;
+    }
+
+    size_t len = (size_t)(end - input);
+    if (len == 1 && (unsigned char)input[0] == 0x18) {
+        return 1;
+    }
+    if (len == 2 && input[0] == '^' && (input[1] == 'X' || input[1] == 'x')) {
+        return 1;
+    }
+
+    return 0;
 }
 ////////////////////////
 
@@ -372,12 +400,12 @@ void menu_search_product(){
     printf("── Product Order Manager | Search ────────────────────────────\n\n");
     printf("\033[0m");
 
-    printf("Enter Product ID or Name keyword or \033[1;31m~exit\033[0m to cancel: ");
+    printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
     fgets(keyword, sizeof(keyword), stdin);
     keyword[strcspn(keyword, "\r\n")] = '\0'; // Remove newline characters
 
     // Check for exit command
-    if(strcmp(keyword, "~exit") == 0){
+    if(input_is_ctrl_x(keyword)){
         return;
     }
 
@@ -420,14 +448,14 @@ void menu_add_product(){
     printf("── Product Order Manager | Add Product ───────────────────────\n\n");
     printf("\033[0m");
 
-    printf("Enter Product ID or type \033[1;31m~exit\033[0m to cancel : ");
+    printf("Enter Product ID or press \033[1;31mCtrl+X\033[0m to cancel : ");
     printf("\033[1;33m");
     scanf("%s", ProductID);
     while(getchar() != '\n');
     printf("\033[0m");
 
     // Check for exit command
-    if(strcmp(ProductID, "~exit") == 0){
+    if(input_is_ctrl_x(ProductID)){
         return;
     }
 
@@ -481,7 +509,7 @@ void menu_remove_product(){
     printf("── Product Order Manager | Remove Product ────────────────────\n\n");
     printf("\033[0m");
 
-    printf("Enter Product ID or Name keyword or \033[1;31m~exit\033[0m to cancel: ");
+    printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
     printf("\033[1;33m");
     if (!fgets(keyword, sizeof(keyword), stdin)) {
         printf("\033[0m");
@@ -490,7 +518,7 @@ void menu_remove_product(){
     keyword[strcspn(keyword, "\r\n")] = '\0';
     printf("\033[0m");
 
-    if(strcmp(keyword, "~exit") == 0){
+    if(input_is_ctrl_x(keyword)){
         return;
     }
 
@@ -522,7 +550,7 @@ void menu_remove_product(){
     }
 
     char choice[256];
-    printf("\nSelect item number(s) to remove (e.g. 1,3) or type \033[1;33mall\033[0m to remove all, or \033[1;31m~exit\033[0m to cancel: ");
+    printf("\nSelect item number(s) to remove (e.g. 1,3) or type \033[1;33mall\033[0m to remove all, or press \033[1;31mCtrl+X\033[0m to cancel: ");
     printf("\033[1;33m");
     if (!fgets(choice, sizeof(choice), stdin)) {
         printf("\033[0m");
@@ -532,7 +560,7 @@ void menu_remove_product(){
     choice[strcspn(choice, "\r\n")] = '\0';
     printf("\033[0m");
 
-    if (strcmp(choice, "~exit") == 0) {
+    if (input_is_ctrl_x(choice)) {
         free(matches);
         printf("\n\033[1;33mOperation cancelled.\033[0m\n");
         return;
@@ -650,10 +678,10 @@ void menu_update_product(){
     }
 
     char keyword[128];
-    printf("Enter Product ID or Name keyword or \033[1;31m~exit\033[0m to cancel: ");
+    printf("Enter Product ID or Name keyword or press \033[1;31mCtrl+X\033[0m to cancel: ");
     if (!fgets(keyword, sizeof(keyword), stdin)) return;
     keyword[strcspn(keyword, "\r\n")] = '\0';
-    if (strcmp(keyword, "~exit") == 0) return;
+    if (input_is_ctrl_x(keyword)) return;
 
     int *matches = NULL;
     int mcount = find_products_by_keyword(keyword, &matches);
@@ -684,10 +712,10 @@ void menu_update_product(){
 
     char choice[32];
     int pick = -1;
-    printf("\nSelect ONE item number to update or \033[1;31m~exit\033[0m to cancel: ");
+    printf("\nSelect ONE item number to update or press \033[1;31mCtrl+X\033[0m to cancel: ");
     if (!fgets(choice, sizeof(choice), stdin)){ free(matches); return; }
     choice[strcspn(choice, "\r\n")] = '\0';
-    if (strcmp(choice, "~exit") == 0){ free(matches); printf("\n\033[1;33mOperation cancelled.\033[0m\n"); return; }
+    if (input_is_ctrl_x(choice)){ free(matches); printf("\n\033[1;33mOperation cancelled.\033[0m\n"); return; }
 
     pick = atoi(choice);
     if (pick < 1 || pick > mcount){
