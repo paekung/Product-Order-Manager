@@ -43,6 +43,7 @@ int input_is_ctrl_x(const char *input);
 int input_is_ctrl_z(const char *input);
 void trim_whitespace(char *str);
 int read_line_allow_ctrl(char *buffer, size_t size);
+int ensure_csv_exists(const char *filename);
 typedef enum {
     MENU_KEY_NONE = 0,
     MENU_KEY_UP,
@@ -548,6 +549,11 @@ int main(){
     signal(SIGTSTP, SIG_IGN); // Ignore Ctrl+Z suspend to handle it manually
     #endif
 
+    if (ensure_csv_exists("products.csv")) {
+        printf("Failed to prepare CSV file.\n");
+        return 1;
+    }
+
     // Load products from CSV file
     if(load_csv("products.csv")){
         printf("Failed to load CSV file.\n");
@@ -559,6 +565,24 @@ int main(){
 
     // Free allocated memory
     free(products);
+    return 0;
+}
+
+int ensure_csv_exists(const char *filename){
+    FILE *fp = fopen(filename, "r");
+    if (fp) {
+        fclose(fp);
+        return 0;
+    }
+
+    fp = fopen(filename, "w");
+    if (!fp) {
+        perror("fopen");
+        return 1;
+    }
+
+    fprintf(fp, "ProductID,ProductName,Quantity,UnitPrice\n");
+    fclose(fp);
     return 0;
 }
 
