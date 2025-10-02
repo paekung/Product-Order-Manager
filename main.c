@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <limits.h>
+#include <signal.h>
+#ifndef _WIN32
+#include <unistd.h>
+#include <termios.h>
+#endif
 
 // For Windows console UTF-8 support
 #ifdef _WIN32
@@ -36,7 +41,9 @@ void menu_remove_product();
 void menu_update_product();
 int find_products_by_keyword(const char *keyword, int **out_matches);
 int input_is_ctrl_x(const char *input);
+int input_is_ctrl_z(const char *input);
 void trim_whitespace(char *str);
+int read_line_allow_ctrl(char *buffer, size_t size);
 /////////////////////////
 
 // Utility functions
@@ -72,8 +79,47 @@ void trim_whitespace(char *str) {
 }
 ////////////////////////
 
-// Detect if the user pressed Ctrl+X (ASCII 24) or typed ^X manually
-int input_is_ctrl_x(const char *input) {
+int read_line_allow_ctrl(char *buffer, size_t size) {
+    if (!buffer || size == 0) {
+        return 0;
+    }
+
+#ifndef _WIN32
+    struct termios oldt;
+    int have_old = 0;
+    if (tcgetattr(STDIN_FILENO, &oldt) == 0) {
+        have_old = 1;
+        struct termios newt = oldt;
+        newt.c_lflag &= (tcflag_t)(~ISIG);
+        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    }
+#endif
+
+    char *res = fgets(buffer, (int)size, stdin);
+
+#ifndef _WIN32
+    if (have_old) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    }
+#endif
+
+    return res != NULL;
+}
+////////////////////////
+
+typedef enum {
+    INPUT_RESULT_OK = 0,
+    INPUT_RESULT_CANCEL,
+    INPUT_RESULT_BACK
+} InputResult;
+
+static int product_id_exists(const char *ProductID);
+static InputResult prompt_product_id(char *ProductID, size_t size, int *hasProductID);
+static InputResult prompt_product_name(char *ProductName, size_t size, int *hasProductName);
+static InputResult prompt_integer_input(const char *prompt, const char *field_name, int *value, int *hasValue);
+////////////////////////
+
+static int input_matches_ctrl(const char *input, unsigned char control_value, char letter) {
     if (!input) {
         return 0;
     }
@@ -88,14 +134,200 @@ int input_is_ctrl_x(const char *input) {
     }
 
     size_t len = (size_t)(end - input);
-    if (len == 1 && (unsigned char)input[0] == 0x18) {
+    if (len == 1 && (unsigned char)input[0] == control_value) {
         return 1;
     }
-    if (len == 2 && input[0] == '^' && (input[1] == 'X' || input[1] == 'x')) {
+    if (len == 2 && input[0] == '^' && (input[1] == letter || input[1] == (char)tolower((unsigned char)letter))) {
         return 1;
     }
 
     return 0;
+}
+
+// Detect if the user pressed Ctrl+X (ASCII 24) or typed ^X manually
+int input_is_ctrl_x(const char *input) {
+    return input_matches_ctrl(input, 0x18, 'X');
+}
+
+// Detect if the user pressed Ctrl+Z (ASCII 26) or typed ^Z manually
+int input_is_ctrl_z(const char *input) {
+    return input_matches_ctrl(input, 0x1A, 'Z');
+}
+////////////////////////
+
+static int product_id_exists(const char *ProductID) {
+    if (!ProductID) {
+        return 0;
+    }
+
+    for (int i = 0; i < product_count; i++) {
+        if (strcmp(products[i].ProductID, ProductID) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static InputResult prompt_product_id(char *ProductID, size_t size, int *hasProductID) {
+    char buf[256];
+
+    while (1) {
+        printf("Enter Product ID or press \033[1;31mCtrl+X\033[0m to cancel");
+        if (hasProductID && *hasProductID) {
+            printf(" [current: %s]", ProductID);
+        }
+        printf(": ");
+
+        printf("\033[1;33m");
+        if (!read_line_allow_ctrl(buf, sizeof(buf))) {
+            printf("\033[0m");
+            return INPUT_RESULT_CANCEL;
+        }
+        buf[strcspn(buf, "\r\n")] = '\0';
+        printf("\033[0m");
+
+        if (input_is_ctrl_x(buf)) {
+            return INPUT_RESULT_CANCEL;
+        }
+
+        if (input_is_ctrl_z(buf)) {
+            printf("\033[1;33mAlready at the first input.\033[0m\n");
+            continue;
+        }
+
+        trim_whitespace(buf);
+
+        if (buf[0] == '\0') {
+            if (hasProductID && *hasProductID) {
+                return INPUT_RESULT_OK;
+            }
+            printf("\033[1;31mProduct ID cannot be empty.\033[0m\n");
+            continue;
+        }
+
+        if (strlen(buf) >= size) {
+            printf("\033[1;31mProduct ID is too long (max %zu characters).\033[0m\n", size - 1);
+            continue;
+        }
+
+        if (!hasProductID || !*hasProductID || strcmp(buf, ProductID) != 0) {
+            if (product_id_exists(buf)) {
+                printf("\033[1;31mDuplicate Product ID. Please enter a different ID.\033[0m\n");
+                continue;
+            }
+            strcpy(ProductID, buf);
+        }
+
+        if (hasProductID) {
+            *hasProductID = 1;
+        }
+
+        return INPUT_RESULT_OK;
+    }
+}
+
+static InputResult prompt_product_name(char *ProductName, size_t size, int *hasProductName) {
+    char buf[256];
+
+    while (1) {
+        printf("Enter Product Name (Ctrl+Z to go back, Ctrl+X to cancel)");
+        if (hasProductName && *hasProductName && ProductName[0] != '\0') {
+            printf(" [current: %s]", ProductName);
+        }
+        printf(": ");
+
+        printf("\033[1;33m");
+        if (!read_line_allow_ctrl(buf, sizeof(buf))) {
+            printf("\033[0m");
+            return INPUT_RESULT_CANCEL;
+        }
+        buf[strcspn(buf, "\r\n")] = '\0';
+        printf("\033[0m");
+
+        if (input_is_ctrl_x(buf)) {
+            return INPUT_RESULT_CANCEL;
+        }
+
+        if (input_is_ctrl_z(buf)) {
+            return INPUT_RESULT_BACK;
+        }
+
+        trim_whitespace(buf);
+
+        if (buf[0] == '\0') {
+            if (hasProductName && *hasProductName) {
+                return INPUT_RESULT_OK;
+            }
+            ProductName[0] = '\0';
+            if (hasProductName) {
+                *hasProductName = 1;
+            }
+            return INPUT_RESULT_OK;
+        }
+
+        strncpy(ProductName, buf, size - 1);
+        ProductName[size - 1] = '\0';
+        if (hasProductName) {
+            *hasProductName = 1;
+        }
+
+        return INPUT_RESULT_OK;
+    }
+}
+
+static InputResult prompt_integer_input(const char *prompt, const char *field_name, int *value, int *hasValue) {
+    char buf[256];
+
+    while (1) {
+        printf("%s (Ctrl+Z to go back, Ctrl+X to cancel)", prompt);
+        if (hasValue && *hasValue) {
+            printf(" [current: %d]", *value);
+        }
+        printf(": ");
+
+        printf("\033[1;33m");
+        if (!read_line_allow_ctrl(buf, sizeof(buf))) {
+            printf("\033[0m");
+            return INPUT_RESULT_CANCEL;
+        }
+        buf[strcspn(buf, "\r\n")] = '\0';
+        printf("\033[0m");
+
+        if (input_is_ctrl_x(buf)) {
+            return INPUT_RESULT_CANCEL;
+        }
+
+        if (input_is_ctrl_z(buf)) {
+            return INPUT_RESULT_BACK;
+        }
+
+        trim_whitespace(buf);
+
+        if (buf[0] == '\0') {
+            if (hasValue && *hasValue) {
+                return INPUT_RESULT_OK;
+            }
+            printf("\033[1;31mInvalid input. Please enter a non-negative integer for %s.\033[0m\n", field_name);
+            continue;
+        }
+
+        char *endp = NULL;
+        long parsed = strtol(buf, &endp, 10);
+        if (endp == buf || *endp != '\0' || parsed < 0 || parsed > INT_MAX) {
+            printf("\033[1;31mInvalid input. Please enter a non-negative integer for %s.\033[0m\n", field_name);
+            continue;
+        }
+
+        if (value) {
+            *value = (int)parsed;
+        }
+        if (hasValue) {
+            *hasValue = 1;
+        }
+
+        return INPUT_RESULT_OK;
+    }
 }
 ////////////////////////
 
@@ -105,6 +337,10 @@ int main(){
     // Enable UTF-8 support for Windows console
     #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8); // Windows-specific
+    #endif
+
+    #ifdef SIGTSTP
+    signal(SIGTSTP, SIG_IGN); // Ignore Ctrl+Z suspend to handle it manually
     #endif
 
     // Load products from CSV file
@@ -460,134 +696,95 @@ void menu_search_product(){
 
 // add new product
 void menu_add_product(){
-    char ProductID[20];
-    char ProductName[100];
-    int Quantity;
-    int UnitPrice;
-    char buf[256];
+    char ProductID[20] = "";
+    char ProductName[100] = "";
+    int Quantity = 0;
+    int UnitPrice = 0;
+    int hasProductID = 0;
+    int hasProductName = 0;
+    int hasQuantity = 0;
+    int hasUnitPrice = 0;
+    int stage = 0;
 
     clear_screen();
     printf("\033[1m");
     printf("── Product Order Manager | Add Product ───────────────────────\n\n");
     printf("\033[0m");
 
-    while (1) {
-        printf("Enter Product ID or press \033[1;31mCtrl+X\033[0m to cancel : ");
-        printf("\033[1;33m");
-        if (!fgets(buf, sizeof(buf), stdin)) {
-            printf("\033[0m");
-            return;
-        }
-        buf[strcspn(buf, "\r\n")] = '\0';
-        printf("\033[0m");
+    while (stage >= 0 && stage < 4) {
+        InputResult result;
 
-        if (input_is_ctrl_x(buf)) {
-            return;
+        clear_screen();
+        printf("\033[1m── Product Order Manager | Add Product ───────────────────────\033[0m\n\n");
+        printf("Enter Product ID: %s\n", hasProductID ? ProductID : "");
+        printf("Enter Product Name: %s\n", hasProductName ? ProductName : "");
+        if (hasQuantity) {
+            printf("Enter Quantity: %d\n", Quantity);
+        } else {
+            printf("Enter Quantity: \n");
         }
+        if (hasUnitPrice) {
+            printf("Enter Unit Price: %d\n", UnitPrice);
+        } else {
+            printf("Enter Unit Price: \n");
+        }
+        printf("\n");
 
-        trim_whitespace(buf);
-        if (buf[0] == '\0') {
-            printf("\033[1;31mProduct ID cannot be empty.\033[0m\n");
-            continue;
-        }
-        if (strlen(buf) >= sizeof(ProductID)) {
-            printf("\033[1;31mProduct ID is too long (max %zu characters).\033[0m\n", sizeof(ProductID) - 1);
-            continue;
-        }
-
-        int duplicate = 0;
-        for (int i = 0; i < product_count; i++) {
-            if (strcmp(products[i].ProductID, buf) == 0) {
-                duplicate = 1;
+        switch (stage) {
+            case 0:
+                result = prompt_product_id(ProductID, sizeof(ProductID), &hasProductID);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    continue;
+                }
+                stage = 1;
                 break;
-            }
-        }
-        if (duplicate) {
-            printf("\033[1;31mDuplicate Product ID. Please enter a different ID.\033[0m\n");
-            continue;
-        }
 
-        strcpy(ProductID, buf);
-        break;
+            case 1:
+                result = prompt_product_name(ProductName, sizeof(ProductName), &hasProductName);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    stage = 0;
+                    continue;
+                }
+                stage = 2;
+                break;
+
+            case 2:
+                result = prompt_integer_input("Enter Quantity", "Quantity", &Quantity, &hasQuantity);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    stage = 1;
+                    continue;
+                }
+                stage = 3;
+                break;
+
+            case 3:
+                result = prompt_integer_input("Enter Unit Price", "Unit Price", &UnitPrice, &hasUnitPrice);
+                if (result == INPUT_RESULT_CANCEL) {
+                    return;
+                }
+                if (result == INPUT_RESULT_BACK) {
+                    stage = 2;
+                    continue;
+                }
+                stage = 4;
+                break;
+
+            default:
+                return;
+        }
     }
 
-    printf("Enter Product Name: ");
-    printf("\033[1;33m");
-    if (!fgets(buf, sizeof(buf), stdin)) {
-        printf("\033[0m");
+    if (stage != 4) {
         return;
-    }
-    buf[strcspn(buf, "\r\n")] = '\0';
-    printf("\033[0m");
-
-    if (input_is_ctrl_x(buf)) {
-        return;
-    }
-
-    trim_whitespace(buf);
-    strncpy(ProductName, buf, sizeof(ProductName) - 1);
-    ProductName[sizeof(ProductName) - 1] = '\0';
-
-    while (1) {
-        printf("Enter Quantity: ");
-        printf("\033[1;33m");
-        if (!fgets(buf, sizeof(buf), stdin)) {
-            printf("\033[0m");
-            return;
-        }
-        buf[strcspn(buf, "\r\n")] = '\0';
-        printf("\033[0m");
-
-        if (input_is_ctrl_x(buf)) {
-            return;
-        }
-
-        trim_whitespace(buf);
-        if (buf[0] == '\0') {
-            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Quantity.\033[0m\n");
-            continue;
-        }
-
-        char *endp = NULL;
-        long value = strtol(buf, &endp, 10);
-        if (endp == buf || *endp != '\0' || value < 0 || value > INT_MAX) {
-            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Quantity.\033[0m\n");
-            continue;
-        }
-
-        Quantity = (int)value;
-        break;
-    }
-
-    while (1) {
-        printf("Enter Unit Price: ");
-        printf("\033[1;33m");
-        if (!fgets(buf, sizeof(buf), stdin)) {
-            printf("\033[0m");
-            return;
-        }
-        buf[strcspn(buf, "\r\n")] = '\0';
-        printf("\033[0m");
-
-        if (input_is_ctrl_x(buf)) {
-            return;
-        }
-
-        trim_whitespace(buf);
-        if (buf[0] == '\0') {
-            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Unit Price.\033[0m\n");
-            continue;
-        }
-
-        char *endp = NULL;
-        long value = strtol(buf, &endp, 10);
-        if (endp == buf || *endp != '\0' || value < 0 || value > INT_MAX) {
-            printf("\033[1;31mInvalid input. Please enter a non-negative integer for Unit Price.\033[0m\n");
-            continue;
-        }
-
-        UnitPrice = (int)value;
-        break;
     }
 
     if(add_product(ProductID, ProductName, Quantity, UnitPrice) == 0){
