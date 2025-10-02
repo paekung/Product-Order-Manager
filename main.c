@@ -1087,12 +1087,11 @@ void menu_product_manager(){
         } else {
             printf("Filter: \033[1;31m%s\033[0m | Matches: 0\n", filter_display);
         }
-        printf("\033[4mUse arrows key to navigate\033[0m | Type to filter, Backspace to erase, Enter selects.\n");
-        printf("Shortcuts: Ctrl+T run unit tests, Ctrl+E run E2E tests, Ctrl+N add product, Ctrl+Q exit.\n");
+        printf("\033[4mUse arrows key to navigate\033[0m | Type to filter, Backspace to erase, \033[4mEnter\033[0m selects.\n");
         printf("\n");
 
         const char *action_run = "[Ctrl+T] Run unit tests";
-        const char *action_run_e2e = "[E] Run end-to-end tests";
+        const char *action_run_e2e = "[Ctrl+E] Run end-to-end tests";
         const char *action_exit = "[Ctrl+Q] Exit application";
         const char *action_add = "[Ctrl+N] Add new product";
 
