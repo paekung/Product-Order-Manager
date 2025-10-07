@@ -287,6 +287,137 @@ int ensure_csv_exists(const char *filename){
     return 0;
 }
 
+static int parse_csv_fields(const char *line, char *fields[], int max_fields, size_t field_size) {
+    if (max_fields <= 0) {
+        return 0;
+    }
+
+    int field_index = 0;
+    size_t len = 0;
+    int in_quotes = 0;
+    int just_closed_quote = 0;
+    const char *p = line;
+
+    fields[0][0] = '\0';
+
+    while (1) {
+        char c = *p;
+
+        if (!in_quotes && just_closed_quote) {
+            if (c == ' ' || c == '\t') {
+                p++;
+                continue;
+            } else {
+                just_closed_quote = 0;
+            }
+        }
+
+        if (in_quotes) {
+            if (c == '"') {
+                if (*(p + 1) == '"') {
+                    if (len < field_size - 1) {
+                        fields[field_index][len++] = '"';
+                    }
+                    p += 2;
+                    continue;
+                } else {
+                    in_quotes = 0;
+                    just_closed_quote = 1;
+                    p++;
+                    continue;
+                }
+            } else if (c == '\0') {
+                fields[field_index][len] = '\0';
+                field_index++;
+                break;
+            } else {
+                if (len < field_size - 1) {
+                    fields[field_index][len++] = c;
+                }
+                p++;
+                continue;
+            }
+        } else {
+            if (c == '"') {
+                in_quotes = 1;
+                p++;
+                continue;
+            } else if (c == ',' || c == '\0' || c == '\r' || c == '\n') {
+                fields[field_index][len] = '\0';
+                field_index++;
+
+                if (field_index >= max_fields) {
+                    break;
+                }
+
+                len = 0;
+                fields[field_index][0] = '\0';
+                just_closed_quote = 0;
+
+                if (c == '\0') {
+                    break;
+                }
+
+                if (c == '\r' && *(p + 1) == '\n') {
+                    p += 2;
+                } else {
+                    if (c != '\0') {
+                        p++;
+                    }
+                    if (c == '\n') {
+                        break;
+                    }
+                }
+                continue;
+            } else {
+                if (len < field_size - 1) {
+                    fields[field_index][len++] = c;
+                }
+                p++;
+                continue;
+            }
+        }
+    }
+
+    return field_index;
+}
+
+static void write_csv_field(FILE *fp, const char *value) {
+    if (!value) {
+        fputs("\"\"", fp);
+        return;
+    }
+
+    int needs_quotes = (value[0] == '\0');
+
+    for (const char *p = value; *p; ++p) {
+        if (*p == '"' || *p == ',' || *p == '\n' || *p == '\r') {
+            needs_quotes = 1;
+            break;
+        }
+    }
+
+    size_t len = strlen(value);
+    if (len > 0) {
+        if (value[0] == ' ' || value[len - 1] == ' ' || value[0] == '\t' || value[len - 1] == '\t') {
+            needs_quotes = 1;
+        }
+    }
+
+    if (needs_quotes) {
+        fputc('"', fp);
+        for (const char *p = value; *p; ++p) {
+            if (*p == '"') {
+                fputc('"', fp);
+            }
+            fputc(*p, fp);
+        }
+        fputc('"', fp);
+    } else {
+        fputs(value, fp);
+    }
+}
+
 // Load products from CSV file then store in products struct
 int load_csv(const char *filename){
     FILE *fp;
@@ -316,31 +447,32 @@ int load_csv(const char *filename){
         }
 
         line[strcspn(line, "\r\n")] = '\0'; // Remove newline characters
-        char *token = strtok(line, ","); // Tokenize by comma
-        
-        // Parse each token and store in the struct
-        int index = 0;
-        while (token){
-            switch(index){
-                case 0:
-                    strcpy(products[product_count].ProductID, token);
-                    break;
-                case 1:
-                    strcpy(products[product_count].ProductName, token);
-                    break;
-                case 2:
-                    products[product_count].Quantity = atoi(token); // Convert string to integer using atoi
-                    break;
-                case 3:
-                    products[product_count].UnitPrice = atoi(token);
-                    break;
-                default:
-                    break;
-            }
-
-            token = strtok(NULL, ","); // Get next token
-            index++; // Increment index
+        if (line[0] == '\0') {
+            continue;
         }
+
+        char field_buffers[4][256];
+        char *fields[4] = {
+            field_buffers[0],
+            field_buffers[1],
+            field_buffers[2],
+            field_buffers[3]
+        };
+        memset(field_buffers, 0, sizeof(field_buffers));
+
+        int parsed = parse_csv_fields(line, fields, 4, sizeof(field_buffers[0]));
+        if (parsed < 4) {
+            continue;
+        }
+
+        strncpy(products[product_count].ProductID, fields[0], sizeof(products[product_count].ProductID) - 1);
+        products[product_count].ProductID[sizeof(products[product_count].ProductID) - 1] = '\0';
+
+        strncpy(products[product_count].ProductName, fields[1], sizeof(products[product_count].ProductName) - 1);
+        products[product_count].ProductName[sizeof(products[product_count].ProductName) - 1] = '\0';
+
+        products[product_count].Quantity = atoi(fields[2]); // Convert string to integer using atoi
+        products[product_count].UnitPrice = atoi(fields[3]);
 
         product_count++; // Increment product count
     }
@@ -520,7 +652,10 @@ int save_csv(const char *filename){
 
     // Write each product
     for(int i=0; i<product_count; i++){
-        fprintf(fp, "%s,%s,%d,%d\n", products[i].ProductID, products[i].ProductName, products[i].Quantity, products[i].UnitPrice);
+        write_csv_field(fp, products[i].ProductID);
+        fputc(',', fp);
+        write_csv_field(fp, products[i].ProductName);
+        fprintf(fp, ",%d,%d\n", products[i].Quantity, products[i].UnitPrice);
     }
 
     fclose(fp);
