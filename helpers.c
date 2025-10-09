@@ -201,7 +201,7 @@ MenuKey read_menu_key(int *out_digit, char *out_char) {
     }
 
     struct termios newt = oldt;
-    newt.c_lflag &= (tcflag_t)(~(ICANON | ECHO));
+    newt.c_lflag &= (tcflag_t)(~(ICANON | ECHO | ISIG));
     newt.c_cc[VMIN] = 1;
     newt.c_cc[VTIME] = 0;
 
@@ -279,7 +279,8 @@ MenuKey read_menu_key(int *out_digit, char *out_char) {
     }
 
     if (ch == 3) {
-        result = MENU_KEY_ESCAPE;
+        result = MENU_KEY_SHORTCUT_EXIT;
+        goto restore_termios;
     }
 
 restore_termios:
